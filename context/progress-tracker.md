@@ -4,11 +4,11 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Feature Development — `/overview` dashboard
+- Feature Development — `/approvals` page
 
 ## Current Goal
 
-- Polish and refine the `/overview` dashboard for visual fidelity, performance, and UX quality.
+- Implement the `/approvals` page: append-only approval queue, fixed-height layout, real-time ready Zustand store, premium animations.
 
 ## Completed
 
@@ -20,6 +20,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - Fixed Tailwind v4 color mapping issues for opacity variants
 - `/overview` layout and component planning
 - `/overview` page implementation (sidebar, topnav, KPIs, flow chart, alert center, strategies)
+- `/approvals` page implementation (master-detail split layout, rich data model, fixed layout container, live-data ready hook)
 - Fixed sparkline/donut position to top-right corner in KPI cards
 - Replaced `box-shadow` hover transitions with GPU-composited `transform: translateY` across all cards
 - Added `scroll-contain` (CSS containment) to the main scrollable area to prevent sidebar repaint on scroll
@@ -33,6 +34,13 @@ Update this file whenever the current phase, active feature, or implementation s
 ## Next Up
 
 - Connect to live backend endpoints (WebSocket / SSE)
+
+## Pending (Live Data Integration)
+
+- **Approvals WebSocket**: `hooks/use-live-approvals.ts` has a stubbed WebSocket block (`// PENDING: Live Data`). When the backend is ready, connect `ws.onmessage` to `store.addApproval()` — zero UI rewrites needed.
+- **Dashboard Metrics WebSocket**: `hooks/use-live-dashboard.ts` has the same stub. Connect to `/ws/metrics` to stream KPI + alert updates into `dashboard-store.ts`.
+- **Approval Action API**: `approval-row.tsx` calls `setStatus()` optimistically on the Zustand store. The API call stub (`// PENDING: POST /approvals/:id/status`) must be wired to the FastAPI backend.
+- **Pagination on Approvals**: The queue currently renders all items. Marked with `// PENDING: Pagination` — add virtual scrolling or cursor-based pagination when data volume grows.
 
 ## Open Questions
 
