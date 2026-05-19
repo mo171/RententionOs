@@ -4,11 +4,11 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Feature Development — `/approvals` page
+- Feature Development — live backend integration (next)
 
 ## Current Goal
 
-- Implement the `/approvals` page: append-only approval queue, fixed-height layout, real-time ready Zustand store, premium animations.
+- Connect WebSocket/SSE endpoints for dashboard, approvals, and causal model stores.
 
 ## Completed
 
@@ -26,6 +26,10 @@ Update this file whenever the current phase, active feature, or implementation s
 - Added `scroll-contain` (CSS containment) to the main scrollable area to prevent sidebar repaint on scroll
 - Added `shadow-primary` utility in `globals.css` for green CTA button glow
 - Applied `shadow-primary` to the "Ask agent" button in `top-navbar.tsx`
+- `/causal-model` page implementation (metrics strip, 12 analytics panels, Recharts + custom SVG DAG)
+- `store/causal-model-store.ts` and `hooks/use-live-causal-model.ts` (mock data, `setSnapshot` for live merge)
+- Route-aware `top-navbar.tsx` (title/subtitle per route; no search bar)
+- `npm run build` verified clean for `/causal-model` route
 
 ## In Progress
 
@@ -41,6 +45,8 @@ Update this file whenever the current phase, active feature, or implementation s
 - **Dashboard Metrics WebSocket**: `hooks/use-live-dashboard.ts` has the same stub. Connect to `/ws/metrics` to stream KPI + alert updates into `dashboard-store.ts`.
 - **Approval Action API**: `approval-row.tsx` calls `setStatus()` optimistically on the Zustand store. The API call stub (`// PENDING: POST /approvals/:id/status`) must be wired to the FastAPI backend.
 - **Pagination on Approvals**: The queue currently renders all items. Marked with `// PENDING: Pagination` — add virtual scrolling or cursor-based pagination when data volume grows.
+- **Causal Model WebSocket**: `hooks/use-live-causal-model.ts` stub. Connect to backend stream and call `store.setSnapshot()` — chart components read store only, no UI rewrites needed.
+- **Retrain API**: `model-metrics-strip.tsx` "Retrain now" toggles local `retrainInProgress` only; wire to FastAPI when ready.
 
 ## Open Questions
 
@@ -59,5 +65,6 @@ Update this file whenever the current phase, active feature, or implementation s
 
 - Dev server is running on `npm run dev` at port 3000.
 - The overview route is at `/overview` (served by `app/(dashboard)/overview/page.tsx`).
+- The causal model route is at `/causal-model` (served by `app/(dashboard)/causal-model/page.tsx`).
 - Do not use `box-shadow` for hover effects — use `transform` only for perf.
 - All new colors MUST be declared as hex values inside `@theme inline` in `globals.css`, not via `:root` var references.
