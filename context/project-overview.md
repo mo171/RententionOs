@@ -158,3 +158,7 @@ redis-any free version but important app should be fast
 1. agents working and personal message is reaching to end user\
 2. mmodel predicting accurately 
 3. functional and scalble (optmistic u.i)
+
+## Pending
+
+- **Live Data Streaming Integration**: The frontend will initially mock live data using Zustand stores and custom hooks. A robust live data strategy (e.g., WebSockets or Server-Sent Events) must be implemented in the backend phase to continuously stream customer activity and update the dashboard KPIs, Alert Center, and Revenue Flow charts in real-time.

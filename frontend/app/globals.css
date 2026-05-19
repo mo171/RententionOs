@@ -170,3 +170,25 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ─── Primary button glow ──────────────────────────────────────
+   Adds a warm green ambient shadow so the CTA pops against the
+   warm-neutral bg without being garish. Only apply to the
+   primary action button — not all green elements.
+──────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .shadow-primary {
+    box-shadow: 0 2px 14px rgba(38, 179, 106, 0.38), 0 1px 3px rgba(38, 179, 106, 0.18);
+  }
+  .shadow-primary:hover {
+    box-shadow: 0 4px 20px rgba(38, 179, 106, 0.48), 0 1px 4px rgba(38, 179, 106, 0.22);
+  }
+  /* Performance: isolate scroll container from parent paint */
+  .scroll-contain {
+    contain: layout style;
+    overscroll-behavior: none;
+  }
+  .will-change-transform {
+    will-change: transform;
+  }
+}
