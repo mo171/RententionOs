@@ -12,7 +12,13 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Completed
 
-- None yet.
+- Set up Next.js boilerplate
+- Cleaned up boilerplate SVGs and CSS
+- Initialized shadcn/ui and `cn()` utility
+- Added all shadcn primitive components
+- Configured `globals.css` with UI Context design tokens
+- Fixed Tailwind v4 color mapping issues for opacity variants
+
 
 ## In Progress
 
