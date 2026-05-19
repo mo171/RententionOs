@@ -161,4 +161,7 @@ redis-any free version but important app should be fast
 
 ## Pending
 
-- **Live Data Streaming Integration**: The frontend will initially mock live data using Zustand stores and custom hooks. A robust live data strategy (e.g., WebSockets or Server-Sent Events) must be implemented in the backend phase to continuously stream customer activity and update the dashboard KPIs, Alert Center, and Revenue Flow charts in real-time.
+- **Dashboard Metrics WebSocket** (`hooks/use-live-dashboard.ts`): Connect to `/ws/metrics` to stream KPI and alert updates into `dashboard-store.ts`. Zero UI rewrites required — only the hook changes.
+- **Approvals WebSocket** (`hooks/use-live-approvals.ts`): Connect to `/ws/approvals` to stream incoming approval requests. Call `store.addApproval()` on each message. The store is append-only, so old data is never mutated.
+- **Approval Action API** (`components/approvals/approval-row.tsx`): Currently uses optimistic Zustand state mutation only. Wire to `POST /api/approvals/:id/status` when backend is ready. Stub is marked `// PENDING: API call`.
+- **Pagination / Virtual Scroll** (`components/approvals/approval-queue.tsx`): Currently renders all items. Marked `// PENDING: Pagination`. Add cursor-based pagination or virtual scrolling when data volume grows.
