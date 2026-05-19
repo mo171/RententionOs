@@ -49,7 +49,7 @@ If implementation changes the architecture, scope, or standards documented in th
 
 
 
-Routes that exist today: `/` (placeholder), `/overview`, `/approvals`. Shared dashboard shell: `(dashboard)/layout.tsx` (fixed sidebar + top nav + scrollable main).
+Routes that exist today: `/` (placeholder), `/overview`, `/approvals`, `/causal-model`. Shared dashboard shell: `(dashboard)/layout.tsx` (fixed sidebar + top nav + scrollable main). Top nav title/subtitle is route-aware via `usePathname()` (no search bar on any route).
 
 
 
@@ -99,6 +99,18 @@ Routes that exist today: `/` (placeholder), `/overview`, `/approvals`. Shared da
 
 
 
+### 4. Causal model (`/causal-model`)
+
+- **Metrics strip** — Model version, AUUC, calibration, coverage, drift, retrain time, outcomes; “Retrain now” stub (local loading state).
+- **Row 1** — Top churn drivers (CSS bars), Qini curve (Recharts), calibration scatter (Recharts).
+- **Row 2** — Uplift distribution (grouped bars), SHAP feature importance (horizontal bars), segment × treatment heatmap (CSS grid).
+- **Row 3** — AUUC over time (area + target line), policy value (horizontal bars), confusion matrix (2×2 grid + metrics).
+- **Row 4** — Lift decile chart, causal DAG (custom SVG), holdout outcomes (sparkline KPIs).
+- **Store** — `store/causal-model-store.ts`; `setSnapshot(partial)` for live updates.
+- **Hook** — `hooks/use-live-causal-model.ts` mounted on the page; WebSocket stubbed (`// PENDING: Live Data`).
+
+
+
 ---
 
 
@@ -133,7 +145,8 @@ These are explicitly called out in `context/progress-tracker.md` and `context/pr
 
 | Shared API / WS clients | `lib/api.ts`, `lib/websocket.ts` (not created yet) | Add typed fetch helper and WebSocket factory per `context/folder-archtecture.md`; keep components free of raw URL strings. |
 
-| Env | `.env.local` | `NEXT_PUBLIC_WS_METRICS_URL`, `NEXT_PUBLIC_WS_APPROVALS_URL`, `NEXT_PUBLIC_API_URL` (names TBD with backend). |
+| Causal model stream | `hooks/use-live-causal-model.ts`, `store/causal-model-store.ts` | WebSocket → `setSnapshot()`. Charts bind to store arrays; no component rewrites. |
+| Env | `.env.local` | `NEXT_PUBLIC_WS_METRICS_URL`, `NEXT_PUBLIC_WS_APPROVALS_URL`, `NEXT_PUBLIC_WS_CAUSAL_MODEL_URL`, `NEXT_PUBLIC_API_URL` (names TBD with backend). |
 
 
 
@@ -186,8 +199,6 @@ Sidebar links exist but there is **no** `app/(dashboard)/…/page.tsx` for:
 - `/designer`
 
 - `/campaigns`
-
-- `/causal-model`
 
 
 
