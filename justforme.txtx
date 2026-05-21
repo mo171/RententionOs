@@ -1,0 +1,19 @@
+AI Strategy Decision Engine Agent-Baed reasoning selects the best retention strategy using churn risk, uplift score, and customer value
+
+{
+  "user_id": 123,
+  "best_discount": "10%",
+  "expected_profit": 1400
+}
+
+
+very ImplementationHow this fits the bigger product picture
+From context/architecture-context.md:
+
+Twilio → SMS (and possibly WhatsApp later)
+Resend → email
+Push → would be your app’s push provider (FCM/APNs, etc.) — not implemented in the Writer/dispatch layer yet; only the strategy label exists now
+So when you see:
+
+channel: Push Notification
+read it as: “send this intervention as an app/mobile push,” scheduled at scheduled_time, for user 99 — not “send everywhere” and not Gmail/WhatsApp unless you later add those as separate channels.

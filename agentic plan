@@ -1,0 +1,109 @@
+# Agentic Intervention System: Research & Proposed Plan
+
+This document outlines the architecture, agent workflow, and technical strategies for building the Intervention System within RetentionOS. It relies on the modern Python AI stack: **LangGraph**, **LangChain**, **Supabase**, and **Trigger.dev**.
+
+## 1. System Architecture & Framework Selection
+
+To build a reliable, self-correcting multi-agent system, the traditional linear execution (like a simple chain) is insufficient. We need a cyclic graph capable of loops (for the corrective writing phase) and state management.
+
+- **Core Agent Orchestration**: **LangGraph**. LangGraph treats the agent workflow as a state machine. It is specifically designed to handle cyclic flows (like our Writer <-> Meta Tribe Reviewer loop) and maintains a robust `State` object that gets updated by each node.
+- **Background Execution Engine**: **Trigger.dev**. Because LLM inferences, RAG pipelines, and corrective loops take unpredictable amounts of time (and often exceed standard HTTP timeout limits), this process must be asynchronous. Trigger.dev handles long-running jobs, automatic retries, and scheduled delays perfectly.
+- **Database & Vector Store**: **Supabase**. We will use standard Postgres tables for user data and `pgvector` for storing company policies (for the Compliance RAG).
+
+## 2. Proposed Agent Workflow
+
+The system takes the initial payload from the ML pipeline:
+```json
+{
+  "user_id": 123,
+  "best_discount": "10%",
+  "expected_profit": 1400
+}
+```
+
+We will model the LangGraph with the following nodes (Agents):
+
+### Node 1: Compliance Agent (The Gatekeeper)
+- **Role**: Ensures the proposed intervention (e.g., a 10% discount) aligns with current company policies.
+- **Mechanism (Corrective RAG - CRAG)**: 
+  1. Generates a query based on the input (e.g., "Are 10% discounts allowed for user 123's segment?").
+  2. Retrieves policy documents from Supabase `pgvector`.
+  3. Uses a grading LLM to check if the retrieved docs are relevant.
+  4. Decides `intervene: True/False` and provides a `reason`.
+- **Outcome**: If False, the graph terminates early (no intervention). If True, proceeds to the next agent.
+
+### Node 2: Strategy Agent (Channel & Timing)
+- **Role**: Determines *how* (SMS, Email, Push) and *when* to send the message.
+- **Mechanism**: Queries Supabase for the user's past interaction history and preferences. Uses an LLM to decide the most effective channel and the highest-conversion time of day.
+- **Output**: Updates the state with `channel` (e.g., "Push Notification") and `scheduled_time` (e.g., "2026-05-22T18:00:00Z").
+
+### Node 3: Intervention Message Writer
+- **Role**: Drafts the actual message tailored to the chosen channel, incorporating the 10% discount.
+- **Mechanism**: Uses strict prompt templates ensuring length constraints (e.g., short for Push) and incorporates the exact discount value.
+- **Output**: Updates the state with `current_draft`.
+
+### Node 4: Meta Tribe Model (The Hook Reviewer)
+- **Role**: Evaluates the `current_draft` for marketing effectiveness, "hook" quality, and tone.
+- **Mechanism**: Acts as a strict evaluator. It uses Pydantic structured outputs to return:
+  ```json
+  {
+    "approved": false,
+    "score": 6,
+    "feedback": "The hook is too weak. Start with a question to create urgency."
+  }
+  ```
+- **The Corrective Loop**: 
+  - **Conditional Edge**: If `approved` is True, move to the Dispatch node.
+  - If `approved` is False, the graph **loops back** to the Intervention Message Writer, appending the `feedback` to the Writer's context so it can generate a better draft.
+
+## 3. Memory & Context Management
+
+### Persistent Memory (State Tracking)
+LangGraph utilizes a `StateGraph` where a `TypedDict` is passed along every node. To ensure resilience (e.g., if the server crashes mid-loop), we use LangGraph's **Checkpointer** connected to Supabase (`AsyncPostgresSaver`). This saves the graph state after every single node execution.
+
+### Token Management & Trimming
+During the Writer <-> Reviewer loop, the conversation history (drafts + feedback) will grow, potentially eating up token limits and increasing costs.
+- **Solution**: We will implement LangChain's `trim_messages` utility inside the Writer node. We will configure it to retain only the *system prompt*, the *original request*, and the *last 2 iterations* of draft/feedback. Older drafts are discarded from the active context window, keeping token usage flat regardless of how many loops occur.
+- **Max Loops Constraint**: We will add a graph constraint (e.g., maximum 3 loops). If the Meta Tribe Model hasn't approved after 3 tries, we fall back to a pre-approved generic template to avoid infinite loops and runaway costs.
+
+## 4. Integrating Trigger.dev
+
+Trigger.dev is the backbone that makes this production-ready.
+
+1. **Triggering**: The FastAPI backend receives the ML output. Instead of running the LangGraph directly, it triggers a background task:
+   ```python
+   # FastAPI Endpoint
+   @app.post("/api/interventions/start")
+   async def start_intervention(data: InterventionPayload):
+       await intervention_task.trigger(payload=data.dict())
+       return {"status": "queued"}
+   ```
+2. **Execution & Resiliency**: Trigger.dev starts the worker. Inside the task, we invoke our compiled LangGraph. If OpenAI's API goes down during the Compliance Agent phase, Trigger.dev catches the exception and automatically retries just that task with exponential backoff.
+3. **Smart Scheduling**: Once the LangGraph finishes the drafting loop, it produces the final message and the `scheduled_time`. We can then use Trigger.dev's native delay functionality:
+   ```python
+   # Inside the Trigger.dev task
+   # ... graph finishes generating message ...
+   
+   # Suspend the execution until the exact right time
+   await wait.until(state["scheduled_time"])
+   
+   # Execution resumes here exactly on time!
+   await send_push_notification(user_id, state["final_message"])
+   ```
+   This means the server isn't burning memory "sleeping" while waiting for the perfect time to send the message.
+
+## User Review Required
+
+> [!IMPORTANT]  
+> **LLM Model Selection**: The Meta Tribe (Reviewer) needs high reasoning capabilities (e.g., GPT-4o or Claude 3.5 Sonnet) to effectively evaluate "hooks". The Writer can be a faster/cheaper model (e.g., GPT-4o-mini). Do you have a preference or restriction on which models to use for different agents?
+
+> [!WARNING]  
+> **Max Retry Loops**: To prevent infinite loops between the Writer and Reviewer, I propose a hard cap of 3 revisions. If it fails 3 times, we use the best available draft. Does this align with your expectations?
+
+## Proposed Implementation Steps (For when we begin coding)
+
+1. **Setup Core Utilities**: Initialize Supabase pgvector client, LangChain LLMs, and Trigger.dev worker in the `utils/` folder (as outlined in backend specs).
+2. **Define Graph State**: Create the Pydantic/TypedDict state holding the user info, drafts, and compliance status.
+3. **Build Individual Agents**: Create the isolated functions for Compliance, Strategy, Writer, and Reviewer.
+4. **Compile LangGraph**: Tie the nodes together, explicitly defining the Corrective Loop and the maximum recursion limits.
+5. **Wrap in Trigger.dev Task**: Create the main entry point task that accepts the ML JSON, runs the graph, handles the `wait.until()`, and mocks the final dispatch.
