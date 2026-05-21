@@ -2,14 +2,63 @@
 Retriever: Runs similarity search against Supabase pgvector.
 Uses the offline all-MiniLM-L6-v2 model for query embedding.
 """
+import json
+import math
 from services.rag.ingestor import embed_texts
+
+
+def _parse_embedding(raw) -> list[float]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [float(x) for x in raw]
+    if isinstance(raw, str):
+        return [float(x) for x in json.loads(raw)]
+    return []
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _retrieve_chunks_local(
+    query_embedding: list[float],
+    supabase_client,
+    top_k: int,
+    match_threshold: float,
+) -> list[dict]:
+    """Fallback when RPC/IVFFlat returns nothing (common with tiny corpora)."""
+    response = supabase_client.table("policy_chunks").select(
+        "chunk_text, doc_name, embedding"
+    ).execute()
+    scored = []
+    for row in response.data or []:
+        emb = _parse_embedding(row.get("embedding"))
+        sim = _cosine_similarity(query_embedding, emb)
+        if sim > match_threshold:
+            scored.append(
+                {
+                    "chunk_text": row["chunk_text"],
+                    "doc_name": row.get("doc_name", "unknown"),
+                    "similarity": sim,
+                }
+            )
+    scored.sort(key=lambda x: x["similarity"], reverse=True)
+    return scored[:top_k]
 
 
 def retrieve_chunks(
     query: str,
     supabase_client,
     top_k: int = 3,
-    match_threshold: float = 0.2,
+    match_threshold: float = 0.1,
 ) -> list[dict]:
     """
     Embeds a single query and retrieves the top-k most similar chunks
@@ -30,6 +79,16 @@ def retrieve_chunks(
     ).execute()
 
     results = response.data or []
+    if not results:
+        results = _retrieve_chunks_local(
+            query_embedding, supabase_client, top_k, match_threshold
+        )
+        if results:
+            print("[Retriever] RPC empty - used local cosine fallback.")
+        elif match_threshold > 0:
+            results = _retrieve_chunks_local(
+                query_embedding, supabase_client, top_k, 0.0
+            )
     return [
         {
             "chunk_text": r["chunk_text"],

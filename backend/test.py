@@ -1,50 +1,48 @@
 """
-CRAG Compliance Agent — end-to-end test.
-Ingest embedded policy only → run full pipeline → print trace → assert pass criteria.
+Demo: Full intervention pipeline with APPROVED outcome (intervene=True + strategy).
+
 Run from backend/: python test.py
+
+Shows:
+  1. Compliance (CRAG) approves the discount
+  2. Strategy picks channel + send time for subscriber 99
 """
+import json
 import os
 import sys
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
 
-from models.compliance_models import InterventionPayload
+from models.compliance_models import InterventionPayload, ComplianceResult
+from models.strategy_models import StrategyResult
 from services.rag.ingestor import ingest_from_text
-from services.rag.compliance_service import run_compliance_check
-from services.agents.compliance_agent import run_compliance_graph
+from services.agents.intervention_graph import run_intervention_graph
 from utils.supabase_client import get_supabase_client
-from utils.llm import get_llm
 
 POLICY_DOC = "company_retention_policy"
-# Legacy test doc — cleared so retrieval only hits company_retention_policy
-LEGACY_DOC = "test_discount_policy"
 
 POLICY_TEXT = """
 Company Retention Discount Policy (Test Document)
 
-Section 1 — Authorized Discount Levels
+Section 1 - Authorized Discount Levels
 Subscribers may receive promotional discounts between 5% and 20% inclusive.
 Discounts above 20% require executive approval.
 
-Section 2 — Eligibility
+Section 2 - Eligibility
 All active subscribers with expected intervention profit above $500 are eligible
 for standard retention discounts.
 
-Section 3 — Profit Requirements
+Section 3 - Profit Requirements
 Interventions with expected profit of at least $800 at a 15% discount level
 are automatically approved when the subscriber is in good standing.
 
-Section 4 — Compliance
+Section 4 - Compliance
 Discount offers must be documented in the customer record. Maximum one retention
 offer per subscriber per 90-day period.
 """
-
-RETRIEVAL_QUESTION = (
-    "Are 15% discounts allowed for subscriber user_id 99 with expected profit $800?"
-)
 
 TEST_PAYLOAD = InterventionPayload(
     user_id=99,
@@ -59,132 +57,111 @@ def validate_environment() -> bool:
     for key in ("OPENAI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
         val = os.getenv(key, "")
         if not val or "your_" in val:
-            print(f"[FAIL] {key} is missing or not configured.")
+            print(f"[FAIL] {key} missing.")
             ok = False
         else:
-            print(f"[OK] {key} configured.")
-
-    cohere = os.getenv("COHERE_API_KEY", "")
-    if not cohere or cohere == "your_cohere_api_key_here":
-        print("[WARN] COHERE_API_KEY missing — reranker will use RRF-only fallback.")
-    else:
-        print("[OK] COHERE_API_KEY configured.")
+            print(f"[OK] {key}")
     return ok
 
 
-def ingest_policy(supabase) -> int:
-    """Test-only ingest: clear noise docs, store embedded retention policy only."""
-    print("\n--- Ingest: company_retention_policy only (test mode) ---")
-    for doc in (LEGACY_DOC, POLICY_DOC):
+def setup_test_data(supabase) -> None:
+    print("\n[Setup] Ingest policy + verify subscriber 99")
+    for doc in ("test_discount_policy", POLICY_DOC, "debug_policy"):
         supabase.table("policy_chunks").delete().eq("doc_name", doc).execute()
-        print(f"[Ingest] Cleared prior chunks for '{doc}'.")
+    n = ingest_from_text(POLICY_TEXT, POLICY_DOC, supabase)
+    print(f"  Policy chunks stored: {n}")
 
-    count = ingest_from_text(POLICY_TEXT, POLICY_DOC, supabase)
-    print(f"[Ingest] Stored {count} chunk(s) for '{POLICY_DOC}'.")
-    return count
-
-
-def print_trace(trace: dict) -> None:
-    print("\n--- Pipeline Trace ---")
-    print(f"Retrieval question: {RETRIEVAL_QUESTION}")
-    print("\nGenerated queries:")
-    for i, q in enumerate(trace.get("queries", []), start=1):
-        print(f"  {i}. {q}")
-
-    print(f"\nRaw chunks retrieved: {len(trace.get('raw_chunks', []))}")
-    for c in trace.get("raw_chunks", [])[:3]:
-        print(f"  - [{c.get('doc_name')}] sim={c.get('similarity', 0):.3f} | {c['chunk_text'][:80]}...")
-
-    print(f"\nFused top chunks: {len(trace.get('fused_chunks', []))}")
-    for c in trace.get("fused_chunks", []):
-        score = c.get("rerank_score") or c.get("rrf_score") or c.get("similarity", 0)
-        print(f"  - [{c.get('doc_name')}] score={score} | {c['chunk_text'][:80]}...")
-
-    print(f"\nGraded relevant chunks: {len(trace.get('graded_chunks', []))}")
-    for c in trace.get("graded_chunks", []):
-        print(f"  - RELEVANT: {c.get('relevance_explanation', 'N/A')}")
-
-    print("\nReasoning trace:")
-    print(trace.get("reasoning_trace", "(none)")[:800])
-    print("..." if len(trace.get("reasoning_trace", "")) > 800 else "")
+    sub = supabase.table("subscribers").select("user_id, full_name").eq("user_id", 99).execute()
+    if not sub.data:
+        raise RuntimeError("Run migrations/003_subscribers_and_interactions.sql first.")
+    print(f"  Subscriber: {sub.data[0]['full_name']} (user_id=99)")
 
 
-def self_rate_result(result, trace: dict) -> None:
-    llm = get_llm(model_name="gpt-4o-mini", temperature=0.0)
-    prompt = f"""You are evaluating a compliance RAG system output.
+def print_final_results(state: dict) -> None:
+    cr = state.get("compliance_result")
+    if isinstance(cr, dict):
+        cr = ComplianceResult(**cr)
+    sr = state.get("strategy_result")
+    if isinstance(sr, dict):
+        sr = StrategyResult(**sr)
 
-Retrieval question: {RETRIEVAL_QUESTION}
-Test payload: user_id=99, best_discount=15%, expected_profit=800
+    profile = state.get("subscriber_profile") or {}
 
-System output:
-- intervene: {result.intervene}
-- policy_source: {result.policy_source}
-- confidence: {result.confidence}
-- reasoning: {result.reasoning}
+    print("\n" + "=" * 60)
+    print("FINAL PIPELINE RESULT (what downstream agents / UI receive)")
+    print("=" * 60)
 
-Chunks graded relevant: {len(trace.get('graded_chunks', []))}
+    print("\n--- ML input (unchanged through graph) ---")
+    print(json.dumps(TEST_PAYLOAD.model_dump(), indent=2))
 
-Rate this system response 1-10 for quality and explain why in 2-3 sentences.
-Respond JSON only: {{"score": int, "explanation": "..."}}"""
-    try:
-        response = llm.invoke([HumanMessage(content=prompt)])
-        print("\n--- Agent Self-Rating ---")
-        print(response.content)
-    except Exception as e:
-        print(f"[WARN] Self-rating failed: {e}")
+    print("\n--- Node 1: Compliance (CRAG) ---")
+    if cr:
+        print(f"  intervene:       {cr.intervene}")
+        print(f"  policy_source:   {cr.policy_source}")
+        print(f"  confidence:      {cr.confidence}/10")
+        print(f"  reasoning:       {cr.reasoning}")
+    else:
+        print("  (no compliance_result)")
+
+    print("\n--- Node 2: Strategy (channel + timing) ---")
+    if sr:
+        print(f"  channel:         {sr.channel}")
+        print(f"  scheduled_time:  {sr.scheduled_time}")
+        print(f"  confidence:      {sr.confidence}/10")
+        print(f"  reasoning:       {sr.reasoning}")
+    else:
+        print("  (strategy skipped - intervene was False)")
+
+    print("\n--- Subscriber context used by strategist ---")
+    print(f"  name:            {profile.get('full_name')}")
+    print(f"  preferred:       {profile.get('preferred_channel')}")
+    print(f"  timezone:        {profile.get('timezone')}")
+    print(f"  events_loaded:   {len(state.get('interaction_history') or [])}")
+
+    print("\n--- Graph flags ---")
+    print(f"  should_intervene: {state.get('should_intervene')}")
+    print("=" * 60)
 
 
-def assert_pass_criteria(result, trace: dict) -> None:
-    assert result is not None, "ComplianceResult is empty"
-    assert result.reasoning and len(result.reasoning) > 20, "Reasoning is too short"
-    assert result.policy_source, "policy_source must be set"
-    assert 1 <= result.confidence <= 10, "confidence must be 1-10"
-    assert len(trace.get("graded_chunks", [])) > 0, (
-        "Expected relevant graded chunks from company_retention_policy"
-    )
-    assert result.intervene is True, (
-        "Test policy approves 15% / $800 profit — expected intervene=True"
-    )
-    assert result.policy_source.lower() != "none", (
-        "policy_source must cite a document when intervene is true"
-    )
-    assert "reasoning_trace" in trace and len(trace["reasoning_trace"]) > 50, (
-        "Full pipeline should produce a reasoning trace (steps 5–6)"
-    )
+def assert_approved_path(state: dict) -> None:
+    assert state.get("should_intervene") is True, "Expected compliance to approve (intervene=True)"
 
-    print("\n[PASS] All success criteria met (approval path).")
-    print(f"  intervene={result.intervene}")
-    print(f"  policy_source={result.policy_source}")
-    print(f"  confidence={result.confidence}")
+    cr = state.get("compliance_result")
+    if isinstance(cr, dict):
+        cr = ComplianceResult(**cr)
+    assert cr and cr.intervene is True
+    assert cr.policy_source.lower() != "none"
+
+    sr = state.get("strategy_result")
+    if isinstance(sr, dict):
+        sr = StrategyResult(**sr)
+    assert sr is not None, "Strategy must run when intervene=True"
+
+    scheduled = datetime.fromisoformat(sr.scheduled_time.replace("Z", "+00:00"))
+    if scheduled.tzinfo is None:
+        scheduled = scheduled.replace(tzinfo=timezone.utc)
+    assert scheduled > datetime.now(timezone.utc)
+
+    assert sr.channel in {"Email", "SMS", "Push Notification"}
+    print("\n[SUCCESS] Pipeline approved intervention and produced strategy plan.")
 
 
 def main() -> None:
     print("=" * 60)
-    print("CRAG Compliance Agent — End-to-End Test")
+    print("RetentionOS - Approved Intervention Demo (user 99, 15% discount)")
     print("=" * 60)
 
     if not validate_environment():
         sys.exit(1)
 
     supabase = get_supabase_client()
-    ingest_policy(supabase)
+    setup_test_data(supabase)
 
-    print("\n--- Run: Full CRAG pipeline (compliance_service) ---")
-    result, trace = run_compliance_check(TEST_PAYLOAD, supabase)
-    print_trace(trace)
-    self_rate_result(result, trace)
-    assert_pass_criteria(result, trace)
+    print("\n[Run] LangGraph: compliance -> (if approved) strategy")
+    state = run_intervention_graph(TEST_PAYLOAD)
 
-    print("\n--- Run: LangGraph compliance node ---")
-    graph_state = run_compliance_graph(TEST_PAYLOAD)
-    graph_result = graph_state.get("compliance_result")
-    assert graph_result is not None
-    assert graph_state.get("should_intervene") == graph_result.intervene
-    print(f"[OK] LangGraph state: should_intervene={graph_state['should_intervene']}")
-
-    print("\n" + "=" * 60)
-    print("TEST COMPLETE — CRAG pipeline operational")
-    print("=" * 60)
+    print_final_results(state)
+    assert_approved_path(state)
 
 
 if __name__ == "__main__":

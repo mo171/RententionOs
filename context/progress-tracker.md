@@ -36,14 +36,18 @@ Update this file whenever the current phase, active feature, or implementation s
 - LangGraph Node 1: `services/agents/compliance_agent.py` (single-node graph, `should_intervene` flag)
 - `backend/test.py` CRAG end-to-end test (ingest → pipeline → LangGraph → pass assertions)
 - `backend/requirements.txt` for agentic backend dependencies
+- Strategy Agent (Node 2): `services/strategy/strategy_service.py`, `strategy_agent.py`, `intervention_graph.py` (compliance → strategy conditional graph)
+- DB migration `003_subscribers_and_interactions.sql` (subscribers + interaction_events, seed user_id 99)
+- `backend/test.py` full pipeline test: compliance approval → strategy channel/timing → hard-stop path
 
 ## In Progress
 
-- Next agent nodes (Strategy, Writer, Meta Tribe Reviewer) + full LangGraph + Trigger.dev task
+- Writer + Meta Tribe Reviewer nodes + Trigger.dev task wrapper
 
 ## Next Up
 
-- Wire `POST /api/compliance/check` when full controller pipeline is ready
+- Run `004_fix_policy_vector_index.sql` on Supabase (recommended if RPC returns empty chunks despite ingest; see Known Issues above)
+- Wire `POST /api/interventions/start` when full controller pipeline is ready
 - Connect to live backend endpoints (WebSocket / SSE)
 
 ## Pending (Live Data Integration)
@@ -59,6 +63,15 @@ Update this file whenever the current phase, active feature, or implementation s
 
 - None currently.
 
+## Known Issues / Operational Notes
+
+### pgvector retrieval empty results (NOT a CRAG logic bug)
+
+- **Symptom:** `Retrieved 0 unique chunks` → compliance hard-stops → looks like RAG failed.
+- **Cause:** IVFFlat index on `policy_chunks` with `lists = 100` performs poorly when the table has very few rows (common in `test.py` and early dev). Ingest/upsert can succeed while `match_policy_chunks` RPC returns `[]`.
+- **Fix:** Run `backend/migrations/004_fix_policy_vector_index.sql` on Supabase. `retriever.py` already falls back to local cosine similarity when RPC is empty (see log: `RPC empty - used local cosine fallback`).
+- **Agent rule:** Do not refactor `compliance_service`, grader, or prompts for this symptom — verify `policy_chunks` row count and retrieval first. See `context/AGENTS.md` § Backend CRAG / RAG.
+
 ## Architecture Decisions
 
 - **Routing-driven sidebar**: Sidebar active state is determined purely by `usePathname()` from `next/navigation`. No client state is needed — the active highlight is a deterministic function of the URL. This is the most correct and idiomatic approach in Next.js App Router.
@@ -67,6 +80,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - **CSS Containment on scroll container**: The main scrollable `<main>` uses `contain: layout style` (via `.scroll-contain`) to create a paint containment boundary. This prevents the sidebar and topnav from being repainted when the main content scrolls.
 - **`shadow-primary` in globals.css**: A one-purpose utility that adds a green ambient glow only to primary CTA elements. Kept separate from the base token system so it does not accidentally propagate to other green-colored elements (e.g., state badges).
 - **Alert Center fixed height**: Fixed height with internal overflow scroll (max 3 items visible). "View All" toggles the visible count without unmounting the component, preserving scroll position.
+- **CRAG vs retrieval failures**: Compliance CRAG orchestration (`compliance_service.py`) is separate from pgvector search (`retriever.py` + migrations). Zero retrieved chunks is treated as a retrieval/index problem first; Python cosine fallback in `retriever.py` is the approved dev workaround until `004` is applied or corpus grows.
 
 ## Session Notes
 

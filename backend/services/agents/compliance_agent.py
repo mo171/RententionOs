@@ -3,16 +3,13 @@ Compliance Agent: LangGraph Node 1 wrapper for the CRAG pipeline.
 """
 from langgraph.graph import StateGraph, END
 
-from models.compliance_models import (
-    InterventionPayload,
-    ComplianceAgentState,
-    ComplianceResult,
-)
+from models.compliance_models import InterventionPayload
+from models.strategy_models import InterventionGraphState, ComplianceAgentState
 from services.rag.compliance_service import run_compliance_check
 from utils.supabase_client import get_supabase_client
 
 
-def compliance_node(state: ComplianceAgentState) -> ComplianceAgentState:
+def compliance_node(state: InterventionGraphState) -> InterventionGraphState:
     """LangGraph node: runs CRAG and updates state."""
     payload = state["payload"]
     if isinstance(payload, dict):
@@ -44,18 +41,9 @@ def build_compliance_graph():
     return graph.compile()
 
 
-def run_compliance_graph(payload: InterventionPayload) -> ComplianceAgentState:
-    """Convenience: invoke the compliance graph with an ML payload."""
+def run_compliance_graph(payload: InterventionPayload) -> InterventionGraphState:
+    """Convenience: invoke the compliance-only graph with an ML payload."""
+    from services.agents.intervention_graph import initial_graph_state
+
     app = build_compliance_graph()
-    initial: ComplianceAgentState = {
-        "payload": payload,
-        "queries": [],
-        "primary_query": "",
-        "raw_chunks": [],
-        "fused_chunks": [],
-        "graded_chunks": [],
-        "reasoning_trace": "",
-        "compliance_result": None,
-        "should_intervene": False,
-    }
-    return app.invoke(initial)
+    return app.invoke(initial_graph_state(payload))
