@@ -30,20 +30,5 @@ class ComplianceResult(BaseModel):
     confidence: int = Field(ge=1, le=10, description="Agent self-assessed confidence score 1-10")
 
 
-# ─── LangGraph State ─────────────────────────────────────────────────────────
-
-class ComplianceAgentState(TypedDict, total=False):
-    # Original ML payload — flows through ALL graph nodes untouched
-    payload: InterventionPayload
-
-    # CRAG intermediate state (populated step by step)
-    queries: list[str]
-    primary_query: str
-    raw_chunks: list[dict]
-    fused_chunks: list[dict]
-    graded_chunks: list[dict]
-    reasoning_trace: str
-
-    # Final output — set by this node, read by next nodes
-    compliance_result: Optional[ComplianceResult]
-    should_intervene: bool
+# LangGraph shared state: see models.strategy_models.InterventionGraphState
+# ComplianceAgentState is an alias in strategy_models for backward compatibility.

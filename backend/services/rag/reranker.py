@@ -102,7 +102,7 @@ def rerank_and_fuse(
     rrf_candidates = reciprocal_rank_fusion(query_grouped, top_n=rrf_pool_size)
 
     if not rrf_candidates:
-        print("[Reranker] No RRF candidates — falling back to flat chunk list.")
+        print("[Reranker] No RRF candidates - falling back to flat chunk list.")
         rrf_candidates = all_chunks[:rrf_pool_size]
 
     print(f"[Reranker] Cohere reranking {len(rrf_candidates)} RRF candidates...")
