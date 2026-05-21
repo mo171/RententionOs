@@ -1,0 +1,49 @@
+from __future__ import annotations
+from typing import TypedDict, Optional
+from pydantic import BaseModel, Field
+
+
+# ─── Input from ML pipeline ──────────────────────────────────────────────────
+
+class InterventionPayload(BaseModel):
+    """The JSON that arrives from the ML pipeline after treatment optimization."""
+    user_id: int
+    best_discount: str          # e.g. "10%"
+    expected_profit: float      # e.g. 1400.0
+
+
+# ─── CRAG intermediate ───────────────────────────────────────────────────────
+
+class RelevanceGrade(BaseModel):
+    """Structured output from the relevance grader LLM per chunk."""
+    is_relevant: bool = Field(description="Whether this chunk is relevant to the query")
+    explanation: str = Field(description="One-sentence reason for the grade")
+
+
+# ─── Final compliance output ─────────────────────────────────────────────────
+
+class ComplianceResult(BaseModel):
+    """Final structured output of the CRAG Compliance Agent."""
+    intervene: bool = Field(description="Whether intervention is approved by policy")
+    reasoning: str  = Field(description="Verbose chain-of-thought trace for UI display")
+    policy_source: str = Field(description="Name of the policy document that decided this")
+    confidence: int = Field(ge=1, le=10, description="Agent self-assessed confidence score 1-10")
+
+
+# ─── LangGraph State ─────────────────────────────────────────────────────────
+
+class ComplianceAgentState(TypedDict, total=False):
+    # Original ML payload — flows through ALL graph nodes untouched
+    payload: InterventionPayload
+
+    # CRAG intermediate state (populated step by step)
+    queries: list[str]
+    primary_query: str
+    raw_chunks: list[dict]
+    fused_chunks: list[dict]
+    graded_chunks: list[dict]
+    reasoning_trace: str
+
+    # Final output — set by this node, read by next nodes
+    compliance_result: Optional[ComplianceResult]
+    should_intervene: bool

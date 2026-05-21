@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+langchain
+langchain-text-splitters
+langchain-openai
+langchain-community
+langchain-core
+langgraph
+supabase
+sentence-transformers
+cohere
+beautifulsoup4
+lxml

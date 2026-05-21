@@ -1,0 +1,7 @@
+AI Strategy Decision Engine Agent-Baed reasoning selects the best retention strategy using churn risk, uplift score, and customer value
+
+{
+  "user_id": 123,
+  "best_discount": "10%",
+  "expected_profit": 1400
+}

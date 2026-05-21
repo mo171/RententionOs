@@ -4,11 +4,11 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Feature Development — live backend integration (next)
+- Feature Development — Agentic Backend Integration
 
 ## Current Goal
 
-- Connect WebSocket/SSE endpoints for dashboard, approvals, and causal model stores.
+- Build and connect the agentic workflow using LangGraph and Trigger.dev
 
 ## Completed
 
@@ -24,19 +24,26 @@ Update this file whenever the current phase, active feature, or implementation s
 - Fixed sparkline/donut position to top-right corner in KPI cards
 - Replaced `box-shadow` hover transitions with GPU-composited `transform: translateY` across all cards
 - Added `scroll-contain` (CSS containment) to the main scrollable area to prevent sidebar repaint on scroll
+- Built Agentic Backend Foundation: Python venv, FastAPI, LangChain, Supabase, and Trigger.dev initialization.
 - Added `shadow-primary` utility in `globals.css` for green CTA button glow
 - Applied `shadow-primary` to the "Ask agent" button in `top-navbar.tsx`
 - `/causal-model` page implementation (metrics strip, 12 analytics panels, Recharts + custom SVG DAG)
 - `store/causal-model-store.ts` and `hooks/use-live-causal-model.ts` (mock data, `setSnapshot` for live merge)
 - Route-aware `top-navbar.tsx` (title/subtitle per route; no search bar)
 - `npm run build` verified clean for `/causal-model` route
+- CRAG Compliance Agent (Node 1): 6-step pipeline in `services/rag/compliance_service.py` (multi-query, pgvector retrieve, Cohere+RRF, grader, reasoning trace, verdict)
+- RAG modules: `ingestor`, `retriever`, `reranker`, `grader` + `match_policy_chunks` RPC migration
+- LangGraph Node 1: `services/agents/compliance_agent.py` (single-node graph, `should_intervene` flag)
+- `backend/test.py` CRAG end-to-end test (ingest → pipeline → LangGraph → pass assertions)
+- `backend/requirements.txt` for agentic backend dependencies
 
 ## In Progress
 
-- None
+- Next agent nodes (Strategy, Writer, Meta Tribe Reviewer) + full LangGraph + Trigger.dev task
 
 ## Next Up
 
+- Wire `POST /api/compliance/check` when full controller pipeline is ready
 - Connect to live backend endpoints (WebSocket / SSE)
 
 ## Pending (Live Data Integration)
