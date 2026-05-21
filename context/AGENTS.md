@@ -63,3 +63,47 @@ The Compliance Agent (Node 1) CRAG pipeline in `backend/services/rag/` is **work
 - **Retrieval / pgvector:** `ingestor.py`, `retriever.py`, SQL migrations `001`–`004`
 - **CRAG reasoning:** `compliance_service.py`, `grader.py`, `reranker.py`, `compliance_prompts.py`
 - **Node 2 Strategy:** `services/strategy/` — does **not** use pgvector; uses `subscribers` + `interaction_events` only
+
+---
+
+## Backend Writer / Reviewer / Dispatch (Nodes 3–5)
+
+### Graph flow
+
+`compliance` → `strategy` → `writer` ↔ `reviewer` (max 3 revisions) → `dispatch` → END
+
+See [intervention_graph.py](backend/services/agents/intervention_graph.py).
+
+### Ownership
+
+| Layer | Files |
+|-------|--------|
+| Writer (Node 3) | `services/writer/writer_service.py`, `prompts/writer_prompts.py` |
+| Reviewer (Node 4) | `services/meta_tribe/meta_tribe_service.py`, `prompts/reviewer_prompts.py` |
+| Send tool | `services/tools/send_message.py` — **only** called from `dispatch_agent.py` |
+| Resend | `utils/resend_client.py` |
+
+### Rules
+
+- Writer produces `MessageDraft` (subject, body_plain, body_html, cta_text, cta_url). **No emojis** in copy.
+- Writer must **not** import Resend or Twilio — single delivery abstraction is `send_message`.
+- Reviewer is **LLM-based** today. **TRIBE v2** (hook/engagement neural scoring) is future — see [backend/docs/FUTURE_TRIBE_V2.md](backend/docs/FUTURE_TRIBE_V2.md).
+- Push and SMS send are skipped per spec; Email via Resend; Twilio is stub only.
+
+### Resend env
+
+```
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=you@your-verified-domain.com   # NOT @gmail.com
+TEST_RECIPIENT_EMAIL=movindsouza79@gmail.com
+FORCE_EMAIL_CHANNEL=true   # tests
+TEST_MODE=true             # sends to TEST_RECIPIENT_EMAIL
+```
+
+If `RESEND_FROM_EMAIL` is a personal inbox, code falls back to `onboarding@resend.dev`.
+
+### Tests
+
+- `python test_writer.py` — Node 3 isolated
+- `python test_reviewer.py` — Node 4 isolated
+- `python test.py` — full pipeline + email send

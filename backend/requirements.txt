@@ -13,3 +13,5 @@ sentence-transformers
 cohere
 beautifulsoup4
 lxml
+resend
+twilio

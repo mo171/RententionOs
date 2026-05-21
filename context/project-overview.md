@@ -51,11 +51,13 @@ intelligence and AI-driven strategy decisions.
 
 ## Core User Flow
 
--No authorization for now only one company who streams its data 
-2. The data that is streamed is procced and displayed.
-3. actionable insights is given based on this data.
-4. custom itervention strategy is given for user to accept and send that to that customer.
-5. results is agian shown to user.
+1. No authorization for now — single company streams customer data.
+2. Streamed data is processed and displayed on the dashboard (`/overview`, `/causal-model`).
+3. Actionable insights and agent activity are shown live.
+4. ML pipeline selects high-value at-risk users and passes a payload to the **agentic intervention pipeline** (LangGraph).
+5. **Human-in-the-loop (before any customer email):** Agents draft compliance reasoning, channel, schedule, and message copy. The intervention lands in **`/approvals`** — the admin reviews compliance reasoning, **edits the message if needed**, then **Approve** or **Reject**. No email/SMS/push is sent until the admin approves.
+6. After approval, delivery runs at the strategy agent’s `scheduled_time` (Trigger.dev + Resend/Twilio).
+7. Outcomes and metrics are shown back on the dashboard.
 
 
 ## Features
@@ -111,10 +113,10 @@ print("Expected Profit:", best_profit)
 
 ```
 
-## Intervention strategy
+## Intervention strategy (agentic pipeline)
 
-- after all the processing the selected users json comes to intervention pipline
-- the agents goes through compliance agents who checks authority of intervention
+After ML treatment optimization, selected users enter the **LangGraph intervention pipeline** (`backend/services/agents/intervention_graph.py`):
+
 ```python
 {
   "user_id": 123,
@@ -122,9 +124,19 @@ print("Expected Profit:", best_profit)
   "expected_profit": 1400
 }
 ```
-- right time to send the push notifcation to user, channel for connections is decided by the user
-- also the intervention message is send by a corrective intervention message writer agent 
-- there could be more agents which are not decided yet
+
+| Step | Agent | Output |
+|------|--------|--------|
+| 1 | **Compliance** (CRAG) | Policy gate; `should_intervene` + reasoning trace |
+| 2 | **Strategy** | Channel (`Email`, `SMS`, `Push Notification`) + `scheduled_time` from subscriber history |
+| 3 | **Writer** | Draft message (HTML email template, CTA, no emojis) |
+| 4 | **Meta Tribe** | Hook/tone review; corrective loop (max 3 revisions) |
+| 5 | **Human approval** (`/approvals`) | Admin reviews reasoning, **tweaks message copy**, Approve or Reject — **required before send** |
+| 6 | **Dispatch** | `send_message` (Resend for email; Twilio stub; push/SMS deferred) — only after admin Approve, at `scheduled_time` |
+
+**Human-in-the-loop:** The frontend approvals queue is not optional polish — it is the production gate. Backend dev tests (`backend/test.py`) may run dispatch immediately; production must stop after node 4 and expose the draft to `/approvals` until an admin accepts (optionally with edited copy).
+
+Future: TRIBE v2 neural hook scoring (`backend/docs/FUTURE_TRIBE_V2.md`); additional agents TBD.
 
 ### Future feature- n8n like canvas
 
@@ -161,7 +173,17 @@ redis-any free version but important app should be fast
 
 ## Pending
 
-- **Dashboard Metrics WebSocket** (`hooks/use-live-dashboard.ts`): Connect to `/ws/metrics` to stream KPI and alert updates into `dashboard-store.ts`. Zero UI rewrites required — only the hook changes.
-- **Approvals WebSocket** (`hooks/use-live-approvals.ts`): Connect to `/ws/approvals` to stream incoming approval requests. Call `store.addApproval()` on each message. The store is append-only, so old data is never mutated.
-- **Approval Action API** (`components/approvals/approval-row.tsx`): Currently uses optimistic Zustand state mutation only. Wire to `POST /api/approvals/:id/status` when backend is ready. Stub is marked `// PENDING: API call`.
-- **Pagination / Virtual Scroll** (`components/approvals/approval-queue.tsx`): Currently renders all items. Marked `// PENDING: Pagination`. Add cursor-based pagination or virtual scrolling when data volume grows.
+### Human-in-the-loop wiring (priority)
+
+- **Approvals queue from backend:** When LangGraph finishes nodes 1–4, push a pending `Approval` to `/approvals` (WebSocket or REST) — **do not auto-dispatch** in production.
+- **Admin edit before send:** `PATCH /api/approvals/:id` for `messagePreview` tweaks; dispatch uses the final edited copy.
+- **Approve → send:** `POST /api/approvals/:id/status` with `approved` triggers Trigger.dev `wait.until(scheduled_time)` then `send_message`.
+- **Reject:** No email to customer; item dismissed in queue.
+
+### Live data & UX
+
+- **Dashboard Metrics WebSocket** (`hooks/use-live-dashboard.ts`): `/ws/metrics` → `dashboard-store.ts`.
+- **Approvals WebSocket** (`hooks/use-live-approvals.ts`): `/ws/approvals` → `store.addApproval()` (append-only).
+- **Approval Action API** (`approval-detail-view.tsx`): Wire Approve/Reject and message PATCH to FastAPI.
+- **Pagination / Virtual Scroll** (`approval-list-panel.tsx`): When queue volume grows.
+- **`POST /api/interventions/start`:** ML payload → Trigger.dev → graph → pending approval record.

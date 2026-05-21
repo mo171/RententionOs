@@ -1,6 +1,7 @@
 """
 Strategy Agent: LangGraph Node 2 — channel and timing.
 """
+import os
 from models.compliance_models import InterventionPayload, ComplianceResult
 from models.strategy_models import InterventionGraphState, StrategyResult
 from services.strategy.strategy_service import run_strategy
@@ -28,6 +29,10 @@ def strategy_node(state: InterventionGraphState) -> InterventionGraphState:
     result, trace = run_strategy(
         payload, compliance_result, reasoning_trace, supabase
     )
+
+    if os.getenv("FORCE_EMAIL_CHANNEL", "").lower() in ("1", "true", "yes"):
+        result = result.model_copy(update={"channel": "Email"})
+        print("[Strategy] FORCE_EMAIL_CHANNEL enabled — channel set to Email.")
 
     return {
         **state,

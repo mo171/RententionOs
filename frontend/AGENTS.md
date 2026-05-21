@@ -33,7 +33,8 @@ RetentionOS ends in a **human-in-the-loop approvals queue** fed by an async mult
 | 2 | **Strategy** | Channel + `scheduled_time` from user history | `agentAction.channel`, `send_at` |
 | 3 | **Writer** | Draft message for channel + discount | `messagePreview` |
 | 4 | **Meta Tribe** | Hook/tone reviewer; corrective loop (max 3) | Rejection feedback → re-draft before queue |
-| — | **Trigger.dev** | Queue graph, retry, `wait.until(scheduled_time)`, dispatch | No direct UI; approvals arrive when graph finishes |
+| 5 | **Dispatch** | `send_message` (Resend email, Twilio stub) | **Not automatic in production** — only after human approval on `/approvals` |
+| — | **Trigger.dev** | Queue graph, retry, `wait.until(scheduled_time)`, then dispatch | No direct UI; approvals arrive **before** send |
 
 **ML ingress payload** (backend `InterventionPayload`):
 
@@ -41,11 +42,32 @@ RetentionOS ends in a **human-in-the-loop approvals queue** fed by an async mult
 { "user_id": 123, "best_discount": "10%", "expected_profit": 1400 }
 ```
 
+**Production flow (target — human-in-the-loop before send):**
+
+```mermaid
+flowchart LR
+  ml[ML payload] --> graph[LangGraph nodes 1-4]
+  graph --> queue[Approvals queue /approvals]
+  queue --> admin[Admin reviews and edits message]
+  admin -->|Approve| send[Dispatch at scheduled_time]
+  admin -->|Reject| endReject[No send]
+```
+
+1. Backend runs Compliance → Strategy → Writer ↔ Reviewer (no customer email yet).
+2. Finished intervention is pushed to **`/approvals`** (WebSocket or API).
+3. **Admin** reads compliance reasoning, previews message, **edits copy if needed**, then **Approve** or **Reject**.
+4. Only after **Approve** does backend call `send_message` (Resend) at `scheduled_time` (Trigger.dev `wait.until`).
+
+The `/approvals` UI already supports this: `messagePreview` edit (`approval-message-edit.tsx`), Approve/Reject (`approval-detail-view.tsx`), `updateMessagePreview()` on the store. Backend dispatch must **not** run until step 4.
+
+**Note:** `backend/test.py` runs the full graph including dispatch for dev/testing. Production wiring will stop the graph before dispatch and expose drafts to the approvals API first.
+
 **Planned FastAPI surface** (not all wired yet):
 
-- `POST /api/interventions/start` — accept ML payload → Trigger.dev task → LangGraph (see agentic plan)
-- `POST /api/compliance/check` — optional direct CRAG check (progress tracker)
-- `POST /api/approvals/:id/status`, `PATCH /api/approvals/:id` — human approve / reject / edit copy
+- `POST /api/interventions/start` — ML payload → Trigger.dev → LangGraph nodes 1–4 → persist pending approval
+- `POST /api/approvals/:id/status` — Approve (trigger send) / Reject (dismiss)
+- `PATCH /api/approvals/:id` — admin tweaks `messagePreview` before approve
+- `GET /api/approvals` — list pending queue
 - WebSockets: `/ws/metrics`, `/ws/approvals`, `/ws/causal-model` (or env URLs)
 
 Auth is out of scope (single company, no login).
@@ -82,7 +104,20 @@ Routes today: `/` (placeholder), `/overview`, `/approvals`, `/causal-model`. Sha
 - **Detail view** — Agent action block, message preview/edit, reasoning + alternatives; Approve / Reject / Modify flows.
 - **Store** — `store/approvals-store.ts`: append-only `addApproval()`, optimistic `setStatus()`, `updateMessagePreview()` (mock seed data).
 - **Hook** — `hooks/use-live-approvals.ts` mounted on the page; WebSocket body is stubbed (`// PENDING: Live Data`).
-- **Backend mapping (when live)** — Map graph output to `Approval`: `ComplianceResult.reasoning` → `reasoning.text`; `intervene` / confidence → list row; Writer output → `messagePreview`; Strategy → `agentAction.channel` / `send_at`. Shape in `backend/models/compliance_models.py` vs `store/approvals-store.ts`.
+- **Backend mapping (when live)** — Map graph state to `Approval` in `store/approvals-store.ts`:
+
+| Backend field | Frontend `Approval` field |
+|---------------|---------------------------|
+| `ComplianceResult.reasoning` | `reasoning.text` / bullets |
+| `ComplianceResult.intervene`, `confidence` | row confidence, risk |
+| `ComplianceResult.policy_source` | policy context in reasoning |
+| `MessageDraft.subject`, `body_plain` | `messagePreview.subject`, `messagePreview.body` |
+| `StrategyResult.channel` | `agentAction.channel` |
+| `StrategyResult.scheduled_time` | `agentAction.send_at` |
+| `ReviewResult.score`, `feedback` | optional detail / audit |
+| `payload.best_discount`, `expected_profit` | `agentAction.amount`, KPI context |
+
+Admin may **edit** `messagePreview` via `updateMessagePreview()` before Approve; patched copy is what dispatch should send.
 
 ### 4. Causal model (`/causal-model`)
 
@@ -98,31 +133,33 @@ Routes today: `/` (placeholder), `/overview`, `/approvals`, `/causal-model`. Sha
 
 ## Backend status (integration context)
 
-Current phase: **Agentic Backend Integration** (`context/progress-tracker.md`). FastAPI app: `backend/app.py` (`/health`, `/api/llm/invoke`, `/api/trigger/callback`).
+Current phase: **Agentic Backend Integration** (`context/progress-tracker.md`). FastAPI: `backend/app.py` (`/health`, `/api/llm/invoke`, `/api/trigger/callback`). Full LangGraph in `backend/services/agents/intervention_graph.py`.
 
-### Done (Node 1 — Compliance / CRAG)
+### Done (all four agent nodes — backend)
 
-| Piece | Location |
-|-------|----------|
-| Policy vectors + `match_policy_chunks` RPC | `backend/migrations/001_*.sql`, `002_match_policy_chunks.sql` |
-| Ingest, retrieve, rerank (Cohere + RRF), grade | `backend/services/rag/{ingestor,retriever,reranker,grader}.py` |
-| 6-step CRAG orchestration | `backend/services/rag/compliance_service.py` |
-| Pydantic models + prompts | `backend/models/compliance_models.py`, `backend/prompts/compliance_prompts.py` |
-| LangGraph Node 1 (single-node graph, `should_intervene`) | `backend/services/agents/compliance_agent.py` |
-| Supabase + LLM + Trigger clients | `backend/utils/{supabase_client,llm,trigger}.py` |
-| E2E test (ingest → CRAG → graph) | `backend/test.py` |
+| Node | Location | UI fields |
+|------|----------|-----------|
+| 1 Compliance (CRAG) | `services/rag/compliance_service.py`, `compliance_agent.py` | `reasoning`, `intervene`, `policy_source` |
+| 2 Strategy | `services/strategy/strategy_service.py`, `strategy_agent.py` | `channel`, `scheduled_time` |
+| 3 Writer | `services/writer/writer_service.py`, `writer_agent.py` | `messagePreview` (subject, body, HTML) |
+| 4 Meta Tribe (LLM) | `services/meta_tribe/meta_tribe_service.py`, `reviewer_agent.py` | review score/feedback (audit) |
+| Dispatch | `services/tools/send_message.py`, `dispatch_agent.py` | send only **after** admin approve (prod) |
+| Graph | `intervention_graph.py` | writer ↔ reviewer loop, max 3 revisions |
+| DB | `migrations/003_subscribers_and_interactions.sql` | subscriber context for strategy |
 
-`ComplianceResult` fields for UI: `intervene`, `reasoning`, `policy_source`, `confidence` (1–10).
+Models: `compliance_models.py`, `strategy_models.py`, `message_models.py` (`MessageDraft`, `ReviewResult`, `SendMessageResult`).
 
-### Not built yet (blocks full pipeline → approvals stream)
+Tests: `test.py` (full pipeline + Resend), `test_writer.py`, `test_reviewer.py`. TRIBE v2 neural hook scoring is **future** (`backend/docs/FUTURE_TRIBE_V2.md`).
 
-- LangGraph nodes 2–4 (Strategy, Writer, Meta Tribe corrective loop)
-- Compiled full graph + max-3 loop fallback + `trim_messages`
-- Trigger.dev task: `intervention_task.trigger` → graph → `wait.until` → dispatch mock
-- `POST /api/interventions/start` and approval persistence APIs
-- WebSocket/SSE publishers for dashboard, approvals, causal model
+### Not built yet (blocks production HITL → live `/approvals`)
 
-Frontend work should assume **hook/store-only** wiring until these exist; do not restructure approval or chart components for live data.
+- Split graph: end after reviewer → **pending approval** record (no auto-dispatch)
+- `POST /api/interventions/start`, approval CRUD, `PATCH` for admin message edits
+- Approve action → Trigger.dev → `wait.until(scheduled_time)` → `send_message` with admin-edited copy
+- WebSocket `/ws/approvals` → `addApproval()` stream
+- Dashboard / causal WebSockets
+
+Frontend: wire **hooks/stores only**; keep approval components as-is. Human-in-the-loop on `/approvals` is the intended gate before any email reaches the customer.
 
 ---
 
@@ -143,10 +180,11 @@ Ordered: **shared clients → live streams → approval actions → missing rout
 | Area | File(s) | What to do |
 |------|---------|------------|
 | Dashboard metrics | `hooks/use-live-dashboard.ts`, `store/dashboard-store.ts` | WS → `updateMetrics` (etc.). **Mount** `useLiveDashboard()` in `(dashboard)/layout.tsx` or `/overview`. |
-| Approvals queue | `hooks/use-live-approvals.ts`, `store/approvals-store.ts` | WS → `addApproval()` only (append-only; never mutate existing rows from stream). Payload mapper from backend graph state → `Approval`. |
+| Approvals queue | `hooks/use-live-approvals.ts`, `store/approvals-store.ts` | WS → `addApproval()` when graph completes nodes 1–4. **Pending only** — customer not emailed yet. Mapper: graph state → `Approval`. |
+| Human approve | `approval-detail-view.tsx` | **Approve** → backend schedules/sends Resend at `scheduled_time` with final `messagePreview` (including admin edits). |
+| Human reject | `approval-detail-view.tsx` | **Reject** → `setStatus('dismissed')`; no dispatch. |
+| Edit before send | `approval-message-edit.tsx`, `updateMessagePreview()` | Admin tweaks subject/body **before** Approve; `PATCH /api/approvals/:id` persists edits for dispatch. |
 | Causal model | `hooks/use-live-causal-model.ts`, `store/causal-model-store.ts` | WS → `setSnapshot(partial)`. |
-| Approve / dismiss | `components/approvals/approval-detail-view.tsx` | `POST /api/approvals/:id/status`; rollback `setStatus()` on failure. |
-| Edit copy | `approval-detail-view.tsx` | `PATCH /api/approvals/:id` for `messagePreview` after Save. |
 | Retrain | `model-metrics-strip.tsx` | Wire “Retrain now” to FastAPI when endpoint exists. |
 
 ### C. Approvals — scale & sidebar
@@ -193,6 +231,8 @@ No `app/(dashboard)/…/page.tsx` yet: `/customers`, `/designer`, `/campaigns` (
 ## Reference
 
 - Agent pipeline spec: `agentic plan`
+- Product & HITL flow: `context/project-overview.md`, `context/progress-tracker.md` (§ Human-in-the-loop)
 - Feature specs: `context/feature-spec/01-design.md`, `02-overwpage.md`, `03-approval.md`
-- Current phase & backend checklist: `context/progress-tracker.md`
-- Compliance types: `backend/models/compliance_models.py`
+- Backend agent specs: `context/feature-spec/backend/02-creatingCRAG.md` … `04-Message-writer.md`
+- Backend context: `context/AGENTS.md`
+- Types: `backend/models/{compliance,strategy,message}_models.py`, `frontend/store/approvals-store.ts`
