@@ -1,0 +1,12 @@
+# Optional production ML stack.
+#
+# The current causal MVP is stdlib-only and does not require these packages.
+# Install this file when replacing the MVP learner with pandas/sklearn/XGBoost.
+
+-r requirements.txt
+
+pandas
+numpy
+scikit-learn
+xgboost
+joblib

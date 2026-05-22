@@ -1,14 +1,30 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import uvicorn
 
-from utils.llm import get_llm
-from utils.trigger import get_trigger_client
+from models.causal_models import CausalScoreRequest, CausalSnapshotResponse
+from services.causal.uplift_service import (
+    build_causal_snapshot,
+    retrain_uplift_model,
+    score_customer,
+)
 
 load_dotenv()
 
 app = FastAPI(title="RetentionOS Agentic Backend", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Request Models
 class LLMInvokeRequest(BaseModel):
@@ -24,10 +40,40 @@ def health_check():
     """Health check endpoint to verify backend is running."""
     return {"status": "ok", "message": "RetentionOS Agentic Backend is up."}
 
+@app.get("/api/causal/snapshot", response_model=CausalSnapshotResponse)
+def causal_snapshot():
+    """Return the latest causal dashboard snapshot from bank.csv."""
+    try:
+        return build_causal_snapshot()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/causal/retrain", response_model=CausalSnapshotResponse)
+def retrain_causal_model():
+    """Retrain the MVP uplift artifacts and return a fresh dashboard snapshot."""
+    try:
+        return retrain_uplift_model()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/causal/score")
+def score_causal_customer(request: CausalScoreRequest):
+    """Score one customer and return uplift plus treatment optimization."""
+    try:
+        return score_customer(
+            request.customer,
+            clv=request.clv,
+            treatment_costs=request.treatment_costs,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/llm/invoke")
 async def invoke_llm(request: LLMInvokeRequest):
     """Test endpoint for Langchain LLM invocation."""
     try:
+        from utils.llm import get_llm
+
         llm = get_llm()
         response = llm.invoke(request.prompt)
         return {"status": "success", "response": response.content}

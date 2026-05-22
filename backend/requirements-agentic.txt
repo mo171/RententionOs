@@ -1,0 +1,19 @@
+# Optional agentic/RAG stack.
+#
+# On Python 3.14, current Supabase storage dependencies can try to compile
+# pyiceberg and require Microsoft C++ Build Tools. Prefer Python 3.10-3.12
+# for this optional stack until upstream wheels are available.
+
+-r requirements.txt
+
+langchain
+langchain-text-splitters
+langchain-openai
+langchain-community
+langchain-core
+langgraph
+supabase
+sentence-transformers
+cohere
+beautifulsoup4
+lxml

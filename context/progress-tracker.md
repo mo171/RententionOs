@@ -39,6 +39,8 @@ Update this file whenever the current phase, active feature, or implementation s
 - Strategy Agent (Node 2): `services/strategy/strategy_service.py`, `strategy_agent.py`, `intervention_graph.py` (compliance → strategy conditional graph)
 - DB migration `003_subscribers_and_interactions.sql` (subscribers + interaction_events, seed user_id 99)
 - `backend/test.py` full pipeline test: compliance approval → strategy channel/timing → hard-stop path
+- Causal uplift MVP: stdlib X-learner-style service over `backend/data/bank.csv`, leakage exclusion for `duration`, treatment proxy `contact != "unknown"`, treatment optimizer, and FastAPI endpoints `/api/causal/snapshot`, `/api/causal/retrain`, `/api/causal/score`
+- `/causal-model` live snapshot wiring: `hooks/use-live-causal-model.ts` fetches backend snapshot and `model-metrics-strip.tsx` calls the retrain endpoint
 
 ## In Progress
 
@@ -56,8 +58,8 @@ Update this file whenever the current phase, active feature, or implementation s
 - **Dashboard Metrics WebSocket**: `hooks/use-live-dashboard.ts` has the same stub. Connect to `/ws/metrics` to stream KPI + alert updates into `dashboard-store.ts`.
 - **Approval Action API**: `approval-row.tsx` calls `setStatus()` optimistically on the Zustand store. The API call stub (`// PENDING: POST /approvals/:id/status`) must be wired to the FastAPI backend.
 - **Pagination on Approvals**: The queue currently renders all items. Marked with `// PENDING: Pagination` — add virtual scrolling or cursor-based pagination when data volume grows.
-- **Causal Model WebSocket**: `hooks/use-live-causal-model.ts` stub. Connect to backend stream and call `store.setSnapshot()` — chart components read store only, no UI rewrites needed.
-- **Retrain API**: `model-metrics-strip.tsx` "Retrain now" toggles local `retrainInProgress` only; wire to FastAPI when ready.
+- **Causal Model WebSocket**: `hooks/use-live-causal-model.ts` now fetches `/api/causal/snapshot`; WebSocket streaming is still pending for continuous updates.
+- **Retrain API**: `model-metrics-strip.tsx` calls `/api/causal/retrain` and merges the returned snapshot; background retraining via Inngest is still pending.
 
 ## Open Questions
 

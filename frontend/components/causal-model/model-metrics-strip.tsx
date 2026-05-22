@@ -3,6 +3,7 @@
 import { useCausalModelStore } from "@/store/causal-model-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { apiRequest } from "@/lib/api";
 
 function MetricCell({
   label,
@@ -29,7 +30,8 @@ function MetricCell({
 }
 
 export function ModelMetricsStrip() {
-  const { summary, retrainInProgress, setRetrainInProgress } = useCausalModelStore();
+  const { summary, retrainInProgress, setRetrainInProgress, setSnapshot } =
+    useCausalModelStore();
 
   return (
     <div className="bg-bg-surface border border-border-default rounded-xl flex items-stretch overflow-hidden">
@@ -60,9 +62,20 @@ export function ModelMetricsStrip() {
             retrainInProgress && "opacity-70"
           )}
           disabled={retrainInProgress}
-          onClick={() => {
+          onClick={async () => {
             setRetrainInProgress(true);
-            setTimeout(() => setRetrainInProgress(false), 2000);
+            try {
+              const data = await apiRequest<{
+                snapshot: Partial<ReturnType<typeof useCausalModelStore.getState>>;
+              }>("/api/causal/retrain", {
+                method: "POST",
+              });
+              setSnapshot(data.snapshot);
+            } catch (error) {
+              console.warn("[causal-model] Retrain failed:", error);
+            } finally {
+              setRetrainInProgress(false);
+            }
           }}
         >
           {retrainInProgress ? "Retraining…" : "Retrain now"}
