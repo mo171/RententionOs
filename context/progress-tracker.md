@@ -39,11 +39,10 @@ Update this file whenever the current phase, active feature, or implementation s
 - `backend/requirements.txt` for agentic backend dependencies
 - Strategy Agent (Node 2): `services/strategy/strategy_service.py`, `strategy_agent.py`, `intervention_graph.py` (compliance → strategy conditional graph)
 - DB migration `003_subscribers_and_interactions.sql` (subscribers + interaction_events, seed user_id 99)
-<<<<<<< HEAD
 - `backend/test.py` full pipeline test: compliance approval → strategy channel/timing → hard-stop path
 - Causal uplift MVP: stdlib X-learner-style service over `backend/data/bank.csv`, leakage exclusion for `duration`, treatment proxy `contact != "unknown"`, treatment optimizer, and FastAPI endpoints `/api/causal/snapshot`, `/api/causal/retrain`, `/api/causal/score`
+- Saved causal model artifacts: `backend/artifacts/causal/uplift_artifacts.pkl` and `backend/artifacts/causal/uplift_metadata.json`
 - `/causal-model` live snapshot wiring: `hooks/use-live-causal-model.ts` fetches backend snapshot and `model-metrics-strip.tsx` calls the retrain endpoint
-=======
 - `backend/test.py` full pipeline test: compliance → strategy → writer → reviewer → dispatch (Resend email)
 - Message Writer (Node 3): `services/writer/writer_service.py`, HTML email template, `writer_agent.py`
 - Meta Tribe Reviewer (Node 4): LLM hook reviewer in `services/meta_tribe/meta_tribe_service.py`, corrective loop (max 3 revisions)
@@ -51,7 +50,6 @@ Update this file whenever the current phase, active feature, or implementation s
 - Full LangGraph: `intervention_graph.py` — compliance → strategy → writer ↔ reviewer → dispatch
 - Tests: `test_writer.py`, `test_reviewer.py`; email sent to `TEST_RECIPIENT_EMAIL` via Resend
 - Future TRIBE v2 doc: `backend/docs/FUTURE_TRIBE_V2.md`
->>>>>>> 050b5f1d6a1c65d0cb97cc82a0ea58e4e4380137
 
 ## In Progress
 
@@ -83,14 +81,12 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Pending (Live Data Integration)
 
-<<<<<<< HEAD
 - **Approvals WebSocket**: `hooks/use-live-approvals.ts` has a stubbed WebSocket block (`// PENDING: Live Data`). When the backend is ready, connect `ws.onmessage` to `store.addApproval()` — zero UI rewrites needed.
 - **Dashboard Metrics WebSocket**: `hooks/use-live-dashboard.ts` has the same stub. Connect to `/ws/metrics` to stream KPI + alert updates into `dashboard-store.ts`.
 - **Approval Action API**: `approval-row.tsx` calls `setStatus()` optimistically on the Zustand store. The API call stub (`// PENDING: POST /approvals/:id/status`) must be wired to the FastAPI backend.
 - **Pagination on Approvals**: The queue currently renders all items. Marked with `// PENDING: Pagination` — add virtual scrolling or cursor-based pagination when data volume grows.
 - **Causal Model WebSocket**: `hooks/use-live-causal-model.ts` now fetches `/api/causal/snapshot`; WebSocket streaming is still pending for continuous updates.
 - **Retrain API**: `model-metrics-strip.tsx` calls `/api/causal/retrain` and merges the returned snapshot; background retraining via Inngest is still pending.
-=======
 ### Human-in-the-loop (frontend ↔ backend)
 
 - **Approvals stream**: Backend finishes nodes 1–4 → emit pending approval (no customer email yet) → `use-live-approvals.ts` → `addApproval()`.
@@ -104,7 +100,6 @@ Update this file whenever the current phase, active feature, or implementation s
 - **Pagination on Approvals**: Virtual scroll or cursor pagination when queue grows.
 - **Causal Model WebSocket**: `use-live-causal-model.ts` → `setSnapshot()`.
 - **Retrain API**: `model-metrics-strip.tsx` "Retrain now" → FastAPI when ready.
->>>>>>> 050b5f1d6a1c65d0cb97cc82a0ea58e4e4380137
 
 ## Open Questions
 

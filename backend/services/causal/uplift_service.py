@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import csv
+import json
 import math
 import os
+import pickle
 import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,6 +15,10 @@ from models.causal_models import CausalScoreResponse
 from services.causal.treatment_optimizer import optimize_treatments
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "bank.csv")
+ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "artifacts", "causal")
+MODEL_ARTIFACT_PATH = os.path.join(ARTIFACT_DIR, "uplift_artifacts.pkl")
+METADATA_ARTIFACT_PATH = os.path.join(ARTIFACT_DIR, "uplift_metadata.json")
+ARTIFACT_VERSION = 1
 
 NUMERIC_COLUMNS = ["age", "balance", "day", "campaign", "pdays", "previous"]
 CATEGORICAL_COLUMNS = [
@@ -248,14 +254,45 @@ def _fit_artifacts() -> UpliftArtifacts:
     )
 
 
+def save_artifacts(artifacts: UpliftArtifacts) -> None:
+    os.makedirs(ARTIFACT_DIR, exist_ok=True)
+    with open(MODEL_ARTIFACT_PATH, "wb") as handle:
+        pickle.dump(artifacts, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    metadata = _model_metadata(artifacts)
+    metadata["artifact_version"] = ARTIFACT_VERSION
+    with open(METADATA_ARTIFACT_PATH, "w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, indent=2)
+
+
+def load_artifacts() -> UpliftArtifacts | None:
+    if not os.path.exists(MODEL_ARTIFACT_PATH):
+        return None
+
+    with open(MODEL_ARTIFACT_PATH, "rb") as handle:
+        artifacts = pickle.load(handle)
+
+    if not isinstance(artifacts, UpliftArtifacts):
+        return None
+    return artifacts
+
+
 @lru_cache(maxsize=1)
 def get_artifacts() -> UpliftArtifacts:
-    return _fit_artifacts()
+    artifacts = load_artifacts()
+    if artifacts is not None:
+        return artifacts
+
+    artifacts = _fit_artifacts()
+    save_artifacts(artifacts)
+    return artifacts
 
 
 def retrain_uplift_model() -> dict[str, Any]:
     get_artifacts.cache_clear()
-    artifacts = get_artifacts()
+    artifacts = _fit_artifacts()
+    save_artifacts(artifacts)
+    get_artifacts()
     return build_causal_snapshot(artifacts)
 
 
@@ -330,19 +367,26 @@ def build_causal_snapshot(artifacts: UpliftArtifacts | None = None) -> dict[str,
 
     return {
         "snapshot": snapshot,
-        "model_metadata": {
-            "model_type": "stdlib_x_learner_mvp",
-            "data_path": "backend/data/bank.csv",
-            "rows": len(artifacts.rows),
-            "treatment_definition": "contact != 'unknown'",
-            "outcome_definition": "deposit == 'yes'",
-            "excluded_columns": sorted(EXCLUDED_COLUMNS),
-            "trained_at": artifacts.trained_at,
-            "caution": (
-                "bank.csv lacks randomized discount assignment; this is an MVP proxy "
-                "until real intervention logs are collected."
-            ),
-        },
+        "model_metadata": _model_metadata(artifacts),
+    }
+
+
+def _model_metadata(artifacts: UpliftArtifacts) -> dict[str, Any]:
+    return {
+        "model_type": "stdlib_x_learner_mvp",
+        "data_path": "backend/data/bank.csv",
+        "rows": len(artifacts.rows),
+        "treatment_definition": "contact != 'unknown'",
+        "outcome_definition": "deposit == 'yes'",
+        "excluded_columns": sorted(EXCLUDED_COLUMNS),
+        "trained_at": artifacts.trained_at,
+        "artifact_version": ARTIFACT_VERSION,
+        "model_artifact_path": "backend/artifacts/causal/uplift_artifacts.pkl",
+        "metadata_artifact_path": "backend/artifacts/causal/uplift_metadata.json",
+        "caution": (
+            "bank.csv lacks randomized discount assignment; this is an MVP proxy "
+            "until real intervention logs are collected."
+        ),
     }
 
 

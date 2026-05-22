@@ -76,6 +76,29 @@ frontend/lib/api.ts
 | `POST` | `/api/causal/retrain` | Clear cached artifacts, retrain from `bank.csv`, and return a fresh snapshot |
 | `POST` | `/api/causal/score` | Score one customer and return uplift, segment, and best treatment |
 
+### Saved Model Artifacts
+
+The causal model now persists trained artifacts under:
+
+```text
+backend/artifacts/causal/uplift_artifacts.pkl
+backend/artifacts/causal/uplift_metadata.json
+```
+
+Runtime behavior:
+
+```text
+First snapshot/score request
+   |
+   v
+Load saved artifact if it exists
+   |
+   v
+If missing, train from bank.csv and save artifact
+```
+
+`POST /api/causal/retrain` always retrains from `bank.csv`, overwrites the saved artifact, refreshes the in-memory cache, and returns the latest dashboard snapshot.
+
 ---
 
 ## Tech Stack
@@ -104,6 +127,10 @@ RetentionOs/
 |   |-- app.py
 |   |-- data/
 |   |   `-- bank.csv
+|   |-- artifacts/
+|   |   `-- causal/
+|   |       |-- uplift_artifacts.pkl
+|   |       `-- uplift_metadata.json
 |   |-- models/
 |   |   |-- causal_models.py
 |   |   |-- compliance_models.py
@@ -228,7 +255,7 @@ Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/api/causal/snapshot
 
 ### Retrain The Model
 
-This clears the in-process cache, retrains from `backend/data/bank.csv`, and returns a fresh dashboard snapshot.
+This clears the in-process cache, retrains from `backend/data/bank.csv`, saves the model to `backend/artifacts/causal/uplift_artifacts.pkl`, writes metadata to `backend/artifacts/causal/uplift_metadata.json`, and returns a fresh dashboard snapshot.
 
 ```powershell
 Invoke-WebRequest -UseBasicParsing -Method Post http://127.0.0.1:8000/api/causal/retrain
