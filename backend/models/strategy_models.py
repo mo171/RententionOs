@@ -6,6 +6,7 @@ from models.compliance_models import (
     InterventionPayload,
     ComplianceResult,
 )
+from models.message_models import MessageDraft, ReviewResult, SendMessageResult
 
 
 class SubscriberProfile(BaseModel):
@@ -61,6 +62,19 @@ class InterventionGraphState(TypedDict, total=False):
     subscriber_profile: Optional[dict]
     interaction_history: list[dict]
     strategy_result: Optional[StrategyResult]
+
+    # Node 3 — Writer
+    current_draft: Optional[MessageDraft]
+    revision_count: int
+    use_fallback_template: bool
+
+    # Node 4 — Reviewer
+    review_history: list[dict]
+    last_review: Optional[ReviewResult]
+    final_approved: bool
+
+    # Dispatch
+    send_result: Optional[SendMessageResult]
 
 
 # Backward compatibility for Node 1-only graph

@@ -8,7 +8,8 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Goal
 
-- Build and connect the agentic workflow using LangGraph and Trigger.dev
+- Wire **human-in-the-loop** on `/approvals` before customer send: graph produces drafts → admin reviews/edits → Approve triggers dispatch at `scheduled_time`
+- Connect Trigger.dev orchestration and frontend live streams
 
 ## Completed
 
@@ -38,28 +39,72 @@ Update this file whenever the current phase, active feature, or implementation s
 - `backend/requirements.txt` for agentic backend dependencies
 - Strategy Agent (Node 2): `services/strategy/strategy_service.py`, `strategy_agent.py`, `intervention_graph.py` (compliance → strategy conditional graph)
 - DB migration `003_subscribers_and_interactions.sql` (subscribers + interaction_events, seed user_id 99)
+<<<<<<< HEAD
 - `backend/test.py` full pipeline test: compliance approval → strategy channel/timing → hard-stop path
 - Causal uplift MVP: stdlib X-learner-style service over `backend/data/bank.csv`, leakage exclusion for `duration`, treatment proxy `contact != "unknown"`, treatment optimizer, and FastAPI endpoints `/api/causal/snapshot`, `/api/causal/retrain`, `/api/causal/score`
 - `/causal-model` live snapshot wiring: `hooks/use-live-causal-model.ts` fetches backend snapshot and `model-metrics-strip.tsx` calls the retrain endpoint
+=======
+- `backend/test.py` full pipeline test: compliance → strategy → writer → reviewer → dispatch (Resend email)
+- Message Writer (Node 3): `services/writer/writer_service.py`, HTML email template, `writer_agent.py`
+- Meta Tribe Reviewer (Node 4): LLM hook reviewer in `services/meta_tribe/meta_tribe_service.py`, corrective loop (max 3 revisions)
+- Unified delivery: `services/tools/send_message.py` + `utils/resend_client.py` (Resend); Twilio stub; push/SMS skipped
+- Full LangGraph: `intervention_graph.py` — compliance → strategy → writer ↔ reviewer → dispatch
+- Tests: `test_writer.py`, `test_reviewer.py`; email sent to `TEST_RECIPIENT_EMAIL` via Resend
+- Future TRIBE v2 doc: `backend/docs/FUTURE_TRIBE_V2.md`
+>>>>>>> 050b5f1d6a1c65d0cb97cc82a0ea58e4e4380137
 
 ## In Progress
 
-- Writer + Meta Tribe Reviewer nodes + Trigger.dev task wrapper
+- **Human-in-the-loop (HITL) before send** — backend graph nodes 1–4 are done; production must **not** call `dispatch` until admin approves on frontend
+- Trigger.dev `wait.until(scheduled_time)` + dispatch **after** approval
+
+### Human-in-the-loop — intended production flow
+
+| Step | Where | Status |
+|------|--------|--------|
+| 1. Agents draft intervention | LangGraph nodes 1–4 (compliance → strategy → writer ↔ reviewer) | **Done** (backend) |
+| 2. Queue pending approval | Push to `/approvals` via WS or API | **Not wired** |
+| 3. Admin reviews | Compliance reasoning, channel, `send_at`, message preview | **UI done** (mock data) |
+| 4. Admin **edits message** | `approval-message-edit.tsx` → `updateMessagePreview()` / future `PATCH` | **UI done**; API pending |
+| 5. Admin **Approve** or **Reject** | `approval-detail-view.tsx` | **UI done** (optimistic store); API pending |
+| 6. Send to customer | `send_message` / Resend at `scheduled_time` | **Done in `test.py` only**; must run only after step 5 |
+
+**Rule:** `backend/test.py` runs the full graph including dispatch for dev verification. Production: graph ends after reviewer → pending approval → admin accept (with optional copy tweaks) → then dispatch.
 
 ## Next Up
 
-- Run `004_fix_policy_vector_index.sql` on Supabase (recommended if RPC returns empty chunks despite ingest; see Known Issues above)
-- Wire `POST /api/interventions/start` when full controller pipeline is ready
-- Connect to live backend endpoints (WebSocket / SSE)
+- Split intervention graph: **stop before `dispatch_agent`** in production; persist pending approval row
+- `POST /api/interventions/start`, `GET/PATCH /api/approvals`, `POST /api/approvals/:id/status` (approve triggers send with edited `messagePreview`)
+- WebSocket `/ws/approvals` → `frontend/hooks/use-live-approvals.ts` → `addApproval()`
+- Run `004_fix_policy_vector_index.sql` on Supabase if RPC returns empty chunks (see Known Issues)
+- Verify Resend domain for production `RESEND_FROM_EMAIL`
+- TRIBE v2 hook/engagement scoring integration
+- Connect dashboard / causal model WebSockets
 
 ## Pending (Live Data Integration)
 
+<<<<<<< HEAD
 - **Approvals WebSocket**: `hooks/use-live-approvals.ts` has a stubbed WebSocket block (`// PENDING: Live Data`). When the backend is ready, connect `ws.onmessage` to `store.addApproval()` — zero UI rewrites needed.
 - **Dashboard Metrics WebSocket**: `hooks/use-live-dashboard.ts` has the same stub. Connect to `/ws/metrics` to stream KPI + alert updates into `dashboard-store.ts`.
 - **Approval Action API**: `approval-row.tsx` calls `setStatus()` optimistically on the Zustand store. The API call stub (`// PENDING: POST /approvals/:id/status`) must be wired to the FastAPI backend.
 - **Pagination on Approvals**: The queue currently renders all items. Marked with `// PENDING: Pagination` — add virtual scrolling or cursor-based pagination when data volume grows.
 - **Causal Model WebSocket**: `hooks/use-live-causal-model.ts` now fetches `/api/causal/snapshot`; WebSocket streaming is still pending for continuous updates.
 - **Retrain API**: `model-metrics-strip.tsx` calls `/api/causal/retrain` and merges the returned snapshot; background retraining via Inngest is still pending.
+=======
+### Human-in-the-loop (frontend ↔ backend)
+
+- **Approvals stream**: Backend finishes nodes 1–4 → emit pending approval (no customer email yet) → `use-live-approvals.ts` → `addApproval()`.
+- **Admin message tweak**: Before Approve, admin edits subject/body in UI; `PATCH /api/approvals/:id` persists `messagePreview` for dispatch.
+- **Approve**: `POST /api/approvals/:id/status` with `approved` → Trigger.dev waits until `scheduled_time` → `send_message` with **final** preview (including edits).
+- **Reject**: `dismissed` — intervention never sent.
+
+### Other live integration
+
+- **Dashboard Metrics WebSocket**: `use-live-dashboard.ts` → `/ws/metrics` → `dashboard-store.ts`.
+- **Pagination on Approvals**: Virtual scroll or cursor pagination when queue grows.
+- **Causal Model WebSocket**: `use-live-causal-model.ts` → `setSnapshot()`.
+- **Retrain API**: `model-metrics-strip.tsx` "Retrain now" → FastAPI when ready.
+>>>>>>> 050b5f1d6a1c65d0cb97cc82a0ea58e4e4380137
 
 ## Open Questions
 
@@ -83,6 +128,14 @@ Update this file whenever the current phase, active feature, or implementation s
 - **`shadow-primary` in globals.css**: A one-purpose utility that adds a green ambient glow only to primary CTA elements. Kept separate from the base token system so it does not accidentally propagate to other green-colored elements (e.g., state badges).
 - **Alert Center fixed height**: Fixed height with internal overflow scroll (max 3 items visible). "View All" toggles the visible count without unmounting the component, preserving scroll position.
 - **CRAG vs retrieval failures**: Compliance CRAG orchestration (`compliance_service.py`) is separate from pgvector search (`retriever.py` + migrations). Zero retrieved chunks is treated as a retrieval/index problem first; Python cosine fallback in `retriever.py` is the approved dev workaround until `004` is applied or corpus grows.
+- **Writer / Reviewer / Send**: Writer drafts only (`writer_service.py`); reviewer approves hooks (`meta_tribe_service.py` LLM today); `send_message` in dispatch only — writer must not call Resend/Twilio directly.
+- **Human-in-the-loop before send**: LangGraph produces drafts; `/approvals` is the gate. Admin may edit `messagePreview` before Approve; dispatch runs only after approval at `scheduled_time`. Dev `test.py` bypasses this for E2E email tests.
+- **Resend FROM address**: `RESEND_FROM_EMAIL` must be a verified domain (not @gmail.com). Tests use `onboarding@resend.dev` automatically if a personal inbox is configured.
+
+### Resend email (operational)
+
+- **TO:** `TEST_RECIPIENT_EMAIL` (e.g. movindsouza79@gmail.com) — recipient can be Gmail.
+- **FROM:** Must be verified at resend.com/domains, or sandbox `onboarding@resend.dev`.
 
 ## Session Notes
 

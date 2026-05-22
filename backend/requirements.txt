@@ -2,3 +2,19 @@ fastapi
 uvicorn
 pydantic
 python-dotenv
+<<<<<<< HEAD
+=======
+langchain
+langchain-text-splitters
+langchain-openai
+langchain-community
+langchain-core
+langgraph
+supabase
+sentence-transformers
+cohere
+beautifulsoup4
+lxml
+resend
+twilio
+>>>>>>> 050b5f1d6a1c65d0cb97cc82a0ea58e4e4380137
