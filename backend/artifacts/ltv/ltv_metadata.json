@@ -1,0 +1,20 @@
+{
+  "model_type": "stdlib_ltv_cfvs_mvp",
+  "source_prototype": "backend/models/LTV.py",
+  "rows": 10000,
+  "train_rows": 8000,
+  "test_rows": 2000,
+  "historical_ltv_formula": "loan_interest_paid_12m + fee_income_earned_12m - servicing_cost_12m",
+  "future_ltv_target": "ltv_historical_12m * synthetic trend factor",
+  "score": "CFVS = segment-weighted historical LTV + predicted LTV + engagement, penalized by default risk",
+  "tier_low_cutoff": 50.3568,
+  "tier_high_cutoff": 57.3026,
+  "trained_at": "2026-05-23T18:43:55.669130Z",
+  "artifact_version": 1,
+  "model_artifact_path": "backend/artifacts/ltv/ltv_model.pkl",
+  "metadata_artifact_path": "backend/artifacts/ltv/ltv_metadata.json",
+  "metrics_json_path": "backend/metrics/ltv_model_metrics.json",
+  "metrics_report_path": "backend/metrics/ltv_model_report.md",
+  "high_value_customers_path": "backend/metrics/high_value_customers.csv",
+  "caution": "The current LTV MVP trains on synthetic Indian banking data from the prototype until production transaction history is available."
+}

@@ -40,6 +40,12 @@ Update this file whenever the current phase, active feature, or implementation s
 - Strategy Agent (Node 2): `services/strategy/strategy_service.py`, `strategy_agent.py`, `intervention_graph.py` (compliance → strategy conditional graph)
 - DB migration `003_subscribers_and_interactions.sql` (subscribers + interaction_events, seed user_id 99)
 - `backend/test.py` full pipeline test: compliance approval → strategy channel/timing → hard-stop path
+- LTV/CFVS eligibility MVP: `backend/create_ltv_model.py`, `backend/services/ltv/ltv_service.py`, and `backend/models/ltv_models.py` integrate the `backend/models/LTV.py` prototype into the backend architecture with historical LTV, predictive 12-month LTV, default-risk penalty, and CFVS scoring
+- Saved LTV model artifacts and metrics: `backend/artifacts/ltv/ltv_model.pkl`, `ltv_metadata.json`, `backend/metrics/ltv_model_metrics.json`, `ltv_model_report.md`, and `high_value_customers.csv`
+- LTV FastAPI endpoints: `/api/ltv/metrics`, `/api/ltv/retrain`, and `/api/ltv/score`
+- Churn prediction MVP: `backend/create_churn_model.py`, `backend/services/churn/churn_service.py`, and `backend/models/churn_models.py` train a stdlib logistic classifier over `bank.csv` using `deposit == "no"` as the churn proxy and excluding `duration`, `deposit`, and `contact`
+- Saved churn model artifacts and metrics: `backend/artifacts/churn/churn_model.pkl`, `churn_metadata.json`, `backend/metrics/churn_model_metrics.json`, `churn_model_report.md`, and `high_risk_customers.csv`
+- Churn FastAPI endpoints: `/api/churn/metrics`, `/api/churn/retrain`, and `/api/churn/score`
 - Causal uplift MVP: stdlib X-learner-style service over `backend/data/bank.csv`, leakage exclusion for `duration`, treatment proxy `contact != "unknown"`, treatment optimizer, and FastAPI endpoints `/api/causal/snapshot`, `/api/causal/retrain`, `/api/causal/score`
 - Saved causal model artifacts: `backend/artifacts/causal/uplift_artifacts.pkl` and `backend/artifacts/causal/uplift_metadata.json`
 - Backend causal metrics bundle: `backend/metrics/uplift_model_metrics.json`, `uplift_model_report.md`, and `persuadable_customers.csv` generated from the saved `.pkl` artifact with AUUC, Qini, churn precision/recall/AUC-ROC, and profit-guarded persuadable ranking
@@ -135,6 +141,21 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Session Notes
 
+- 2026-05-24 - GitHub user `YK1218` (`fs22ai007yashkdhasal@gmail.com`) integrated the LTV prototype into the RetentionOS backend architecture:
+  - `backend/models/LTV.py` remains as the notebook-style source prototype.
+  - `backend/create_ltv_model.py` trains the backend-safe LTV/CFVS model and writes artifacts plus metrics.
+  - `backend/services/ltv/ltv_service.py` implements synthetic BFSI data generation, historical LTV, predictive LTV, default-risk modeling, CFVS scoring, tiering, and high-value export.
+  - `backend/models/ltv_models.py` adds request/response schemas for LTV scoring and metrics.
+  - `backend/artifacts/ltv/ltv_model.pkl` and `ltv_metadata.json` contain the saved LTV artifact.
+  - `backend/metrics/ltv_model_metrics.json`, `ltv_model_report.md`, and `high_value_customers.csv` contain current LTV gate diagnostics.
+  - `backend/app.py` exposes `/api/ltv/metrics`, `/api/ltv/retrain`, and `/api/ltv/score`.
+- 2026-05-23 - GitHub user `YK1218` (`fs22ai007yashkdhasal@gmail.com`) added the backend churn model MVP:
+  - `backend/create_churn_model.py` trains the model from `backend/data/bank.csv` and writes artifacts plus metrics.
+  - `backend/services/churn/churn_service.py` implements the stdlib logistic churn classifier, scoring, metrics, and high-risk customer export.
+  - `backend/models/churn_models.py` adds request/response schemas for churn scoring and metrics.
+  - `backend/artifacts/churn/churn_model.pkl` and `churn_metadata.json` contain the saved churn model artifact.
+  - `backend/metrics/churn_model_metrics.json`, `churn_model_report.md`, and `high_risk_customers.csv` contain current churn model diagnostics.
+  - `backend/app.py` exposes `/api/churn/metrics`, `/api/churn/retrain`, and `/api/churn/score`.
 - 2026-05-23 - GitHub user `YK1218` (`fs22ai007yashkdhasal@gmail.com`) added the backend causal metrics bundle:
   - `backend/metrics/causal_metrics.py` evaluates the saved `.pkl` uplift artifact and writes AUUC, Qini, churn precision/recall/AUC-ROC, uplift deciles, calibration, propensity, and profit-guardrail diagnostics.
   - `backend/metrics/x_learner_reference.py` documents the sklearn/XGBoost production X-Learner implementation path.

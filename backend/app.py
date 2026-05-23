@@ -5,10 +5,22 @@ from dotenv import load_dotenv
 import uvicorn
 
 from models.causal_models import CausalScoreRequest, CausalSnapshotResponse
+from models.churn_models import ChurnMetricsResponse, ChurnScoreRequest
+from models.ltv_models import LTVMetricsResponse, LTVScoreRequest
 from services.causal.uplift_service import (
     build_causal_snapshot,
     retrain_uplift_model,
     score_customer,
+)
+from services.churn.churn_service import (
+    get_churn_metrics,
+    retrain_churn_model,
+    score_customer as score_churn_customer,
+)
+from services.ltv.ltv_service import (
+    get_ltv_metrics,
+    retrain_ltv_model,
+    score_customer as score_ltv_customer,
 )
 
 load_dotenv()
@@ -65,6 +77,54 @@ def score_causal_customer(request: CausalScoreRequest):
             clv=request.clv,
             treatment_costs=request.treatment_costs,
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ltv/metrics", response_model=LTVMetricsResponse)
+def ltv_metrics():
+    """Return the latest LTV model metrics and gate diagnostics."""
+    try:
+        return get_ltv_metrics()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ltv/retrain", response_model=LTVMetricsResponse)
+def retrain_ltv():
+    """Retrain the MVP LTV model and regenerate artifacts plus metrics."""
+    try:
+        return retrain_ltv_model()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ltv/score")
+def score_ltv(request: LTVScoreRequest):
+    """Score one customer for financial value and churn-stage eligibility."""
+    try:
+        return score_ltv_customer(request.customer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/churn/metrics", response_model=ChurnMetricsResponse)
+def churn_metrics():
+    """Return the latest churn model metrics generated from bank.csv."""
+    try:
+        return get_churn_metrics()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/churn/retrain", response_model=ChurnMetricsResponse)
+def retrain_churn():
+    """Retrain the MVP churn model and regenerate artifacts plus metrics."""
+    try:
+        return retrain_churn_model()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/churn/score")
+def score_churn(request: ChurnScoreRequest):
+    """Score one customer and return churn probability plus risk tier."""
+    try:
+        return score_churn_customer(request.customer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

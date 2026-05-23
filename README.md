@@ -38,9 +38,117 @@ Feedback Loop
 - Zustand stores for dashboard, approvals, and causal model state.
 - FastAPI backend in `backend/app.py`.
 - CRAG compliance agent and strategy agent groundwork using LangGraph.
+- LTV/CFVS eligibility gate MVP over synthetic Indian banking customer data.
+- Churn prediction MVP over `backend/data/bank.csv`.
 - Causal uplift MVP over `backend/data/bank.csv`.
 - Causal dashboard snapshot API connected to the frontend causal model page.
 - Retrain button wired to the backend causal retrain endpoint.
+
+---
+
+## LTV / Financial Value Model
+
+The LTV MVP integrates the notebook prototype from `backend/models/LTV.py` into the backend architecture:
+
+- Historical LTV: `loan_interest_paid_12m + fee_income_earned_12m - servicing_cost_12m`
+- Predictive LTV: estimated future 12-month customer value from segment, income, spend, credit, liquidity, engagement, and risk signals
+- Default risk: a separate probability model used to penalize financially risky customers
+- CFVS: Customer Financial Value Score from `0` to `100`
+- Eligibility gate: medium/high/premium CFVS customers are allowed to enter churn scoring
+
+Important modeling caveat: this MVP trains on synthetic Indian banking data from the prototype until production transaction, balance, product, fee, and servicing-cost history is available.
+
+### LTV Files
+
+```text
+backend/create_ltv_model.py
+backend/models/ltv_models.py
+backend/services/ltv/ltv_service.py
+backend/artifacts/ltv/ltv_model.pkl
+backend/artifacts/ltv/ltv_metadata.json
+backend/metrics/ltv_model_metrics.json
+backend/metrics/ltv_model_report.md
+backend/metrics/high_value_customers.csv
+```
+
+### LTV API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/ltv/metrics` | Load/train LTV artifacts and return gate diagnostics |
+| `POST` | `/api/ltv/retrain` | Retrain the LTV/CFVS model and regenerate artifacts plus metrics |
+| `POST` | `/api/ltv/score` | Score one customer for financial value and churn-stage eligibility |
+
+### Run The LTV Model
+
+From the backend directory:
+
+```powershell
+..\.venv\Scripts\python.exe create_ltv_model.py
+```
+
+This writes:
+
+```text
+backend/artifacts/ltv/ltv_model.pkl
+backend/artifacts/ltv/ltv_metadata.json
+backend/metrics/ltv_model_metrics.json
+backend/metrics/ltv_model_report.md
+backend/metrics/high_value_customers.csv
+```
+
+---
+
+## Churn Model
+
+The churn MVP implements a lightweight supervised classifier over the Bank Marketing dataset:
+
+- Outcome `Y`: churn proxy `deposit == "no"`
+- Retention proxy: `deposit == "yes"`
+- Covariates `X`: customer profile, banking attributes, campaign history, and previous outcome fields
+- Leakage exclusion: `duration`, `deposit`, and `contact` are excluded
+- Risk gate: customers above the learned threshold are eligible to enter causal uplift scoring
+
+Important modeling caveat: `bank.csv` does not include a true future churn event such as account closure, inactivity, or balance runoff. The current MVP uses failed deposit/subscription as a churn proxy for system integration and model workflow validation. Production churn modeling needs historical customer snapshots and a future churn observation window.
+
+### Churn Files
+
+```text
+backend/create_churn_model.py
+backend/models/churn_models.py
+backend/services/churn/churn_service.py
+backend/artifacts/churn/churn_model.pkl
+backend/artifacts/churn/churn_metadata.json
+backend/metrics/churn_model_metrics.json
+backend/metrics/churn_model_report.md
+backend/metrics/high_risk_customers.csv
+```
+
+### Churn API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/churn/metrics` | Load/train churn artifacts and return the latest metrics bundle |
+| `POST` | `/api/churn/retrain` | Retrain from `bank.csv`, save artifacts, and regenerate metrics |
+| `POST` | `/api/churn/score` | Score one customer and return churn probability, risk tier, and risk drivers |
+
+### Run The Churn Model
+
+From the backend directory:
+
+```powershell
+..\.venv\Scripts\python.exe create_churn_model.py
+```
+
+This writes:
+
+```text
+backend/artifacts/churn/churn_model.pkl
+backend/artifacts/churn/churn_metadata.json
+backend/metrics/churn_model_metrics.json
+backend/metrics/churn_model_report.md
+backend/metrics/high_risk_customers.csv
+```
 
 ---
 
@@ -121,7 +229,7 @@ If missing, train from bank.csv and save artifact
 | Charts | Recharts |
 | Backend | FastAPI |
 | Agents | LangChain, LangGraph |
-| ML MVP | Python stdlib X-learner-style implementation |
+| ML MVP | Python stdlib LTV/CFVS gate, churn classifier, and X-learner-style uplift implementation |
 | ML Upgrade Path | pandas, numpy, scikit-learn, XGBoost, joblib |
 | Database | Supabase PostgreSQL |
 | Async Jobs | Inngest / Trigger-style task orchestration |
@@ -135,17 +243,28 @@ If missing, train from bank.csv and save artifact
 RetentionOs/
 |-- backend/
 |   |-- app.py
+|   |-- create_ltv_model.py
+|   |-- create_churn_model.py
 |   |-- data/
 |   |   `-- bank.csv
 |   |-- artifacts/
+|   |   |-- ltv/
+|   |   |   |-- ltv_model.pkl
+|   |   |   `-- ltv_metadata.json
+|   |   |-- churn/
+|   |   |   |-- churn_model.pkl
+|   |   |   `-- churn_metadata.json
 |   |   `-- causal/
 |   |       |-- uplift_artifacts.pkl
 |   |       `-- uplift_metadata.json
 |   |-- models/
+|   |   |-- ltv_models.py
 |   |   |-- causal_models.py
 |   |   |-- compliance_models.py
 |   |   `-- strategy_models.py
 |   |-- services/
+|   |   |-- ltv/
+|   |   |-- churn/
 |   |   |-- causal/
 |   |   |-- agents/
 |   |   |-- rag/

@@ -1,0 +1,23 @@
+{
+  "model_type": "stdlib_logistic_churn_mvp",
+  "data_path": "backend/data/bank.csv",
+  "rows": 11162,
+  "train_rows": 8929,
+  "test_rows": 2233,
+  "outcome_definition": "churn_proxy = deposit == 'no'",
+  "retention_definition": "deposit == 'yes'",
+  "excluded_columns": [
+    "contact",
+    "deposit",
+    "duration"
+  ],
+  "feature_count": 47,
+  "trained_at": "2026-05-23T18:04:41.987860Z",
+  "artifact_version": 1,
+  "model_artifact_path": "backend/artifacts/churn/churn_model.pkl",
+  "metadata_artifact_path": "backend/artifacts/churn/churn_metadata.json",
+  "metrics_json_path": "backend/metrics/churn_model_metrics.json",
+  "metrics_report_path": "backend/metrics/churn_model_report.md",
+  "high_risk_customers_path": "backend/metrics/high_risk_customers.csv",
+  "caution": "bank.csv has no true churn event or future inactivity window; deposit == 'no' is used as an MVP churn proxy."
+}
