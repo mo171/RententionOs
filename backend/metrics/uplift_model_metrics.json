@@ -1,0 +1,595 @@
+{
+  "generated_at": "2026-05-22T17:57:05.584752Z",
+  "model": {
+    "model_type": "stdlib_x_learner_mvp",
+    "trained_at": "2026-05-22T17:17:05.210740Z",
+    "row_count": 11162,
+    "feature_count": 47,
+    "feature_columns": [
+      "age",
+      "balance",
+      "day",
+      "campaign",
+      "pdays",
+      "previous",
+      "job=admin.",
+      "job=blue-collar",
+      "job=entrepreneur",
+      "job=housemaid",
+      "job=management",
+      "job=retired",
+      "job=self-employed",
+      "job=services",
+      "job=student",
+      "job=technician",
+      "job=unemployed",
+      "job=unknown",
+      "marital=divorced",
+      "marital=married",
+      "marital=single",
+      "education=primary",
+      "education=secondary",
+      "education=tertiary",
+      "education=unknown",
+      "default=no",
+      "default=yes",
+      "housing=no",
+      "housing=yes",
+      "loan=no",
+      "loan=yes",
+      "month=apr",
+      "month=aug",
+      "month=dec",
+      "month=feb",
+      "month=jan",
+      "month=jul",
+      "month=jun",
+      "month=mar",
+      "month=may",
+      "month=nov",
+      "month=oct",
+      "month=sep",
+      "poutcome=failure",
+      "poutcome=other",
+      "poutcome=success",
+      "poutcome=unknown"
+    ],
+    "model_artifact_path": "backend/artifacts/causal/uplift_artifacts.pkl",
+    "metrics_json_path": "backend/metrics/uplift_model_metrics.json",
+    "metrics_report_path": "backend/metrics/uplift_model_report.md",
+    "persuadables_csv_path": "backend/metrics/persuadable_customers.csv"
+  },
+  "schema_mapping": {
+    "features": {
+      "numeric": [
+        "age",
+        "balance",
+        "day",
+        "campaign",
+        "pdays",
+        "previous"
+      ],
+      "categorical": [
+        "job",
+        "marital",
+        "education",
+        "default",
+        "housing",
+        "loan",
+        "month",
+        "poutcome"
+      ],
+      "excluded_for_leakage_or_target": [
+        "contact",
+        "deposit",
+        "duration"
+      ]
+    },
+    "treatment": "contact != 'unknown'",
+    "outcome": "deposit == 'yes'"
+  },
+  "dataset": {
+    "rows": 11162,
+    "treated_rows": 8816,
+    "control_rows": 2346,
+    "treatment_rate": 0.7898,
+    "outcome_rate": 0.4738
+  },
+  "causal_metrics": {
+    "auuc": 0.216,
+    "dashboard_scaled_auuc": 0.8639,
+    "qini_coefficient": -304.0515,
+    "normalized_qini": -0.1099,
+    "top_decile_observed_uplift": 0.0619,
+    "mean_predicted_uplift": -0.0459,
+    "median_predicted_uplift": -0.0338,
+    "max_predicted_uplift": 0.1465,
+    "min_predicted_uplift": -0.3334
+  },
+  "churn_metrics": {
+    "threshold": 0.5,
+    "precision": 0.5262,
+    "recall": 1.0,
+    "f1": 0.6895,
+    "accuracy": 0.5262,
+    "auc_roc": 0.6378,
+    "confusion": {
+      "tp": 5873,
+      "fp": 5289,
+      "fn": 0,
+      "tn": 0
+    }
+  },
+  "profit_guardrail": {
+    "ltv_assumption": 1000.0,
+    "default_treatment_costs": {
+      "discount_5": 50.0,
+      "discount_10": 100.0,
+      "discount_15": 150.0,
+      "discount_20": 200.0
+    },
+    "approval_rule": "approved when uplift_score > 0 and best expected_profit > 0",
+    "approved_in_top_list": 5,
+    "top_list_size": 5,
+    "positive_uplift_rows": 1172,
+    "positive_uplift_rate": 0.105
+  },
+  "qini_curve": [
+    {
+      "population_fraction": 0.0,
+      "rows": 0,
+      "treated_rows": 0,
+      "control_rows": 0,
+      "observed_uplift_rate": 0.0,
+      "incremental_outcomes": 0.0
+    },
+    {
+      "population_fraction": 0.1,
+      "rows": 1116.0,
+      "treated_rows": 911.0,
+      "control_rows": 205.0,
+      "observed_uplift_rate": 0.0619,
+      "incremental_outcomes": 56.3659
+    },
+    {
+      "population_fraction": 0.2,
+      "rows": 2232.0,
+      "treated_rows": 1699.0,
+      "control_rows": 533.0,
+      "observed_uplift_rate": 0.1563,
+      "incremental_outcomes": 265.546
+    },
+    {
+      "population_fraction": 0.3,
+      "rows": 3349.0,
+      "treated_rows": 2417.0,
+      "control_rows": 932.0,
+      "observed_uplift_rate": 0.1918,
+      "incremental_outcomes": 463.4968
+    },
+    {
+      "population_fraction": 0.4,
+      "rows": 4465.0,
+      "treated_rows": 3165.0,
+      "control_rows": 1300.0,
+      "observed_uplift_rate": 0.2313,
+      "incremental_outcomes": 731.9192
+    },
+    {
+      "population_fraction": 0.5,
+      "rows": 5581.0,
+      "treated_rows": 3893.0,
+      "control_rows": 1688.0,
+      "observed_uplift_rate": 0.2387,
+      "incremental_outcomes": 929.3075
+    },
+    {
+      "population_fraction": 0.6,
+      "rows": 6697.0,
+      "treated_rows": 4609.0,
+      "control_rows": 2088.0,
+      "observed_uplift_rate": 0.2512,
+      "incremental_outcomes": 1157.5704
+    },
+    {
+      "population_fraction": 0.7,
+      "rows": 7813.0,
+      "treated_rows": 5512.0,
+      "control_rows": 2301.0,
+      "observed_uplift_rate": 0.2685,
+      "incremental_outcomes": 1479.7006
+    },
+    {
+      "population_fraction": 0.8,
+      "rows": 8930.0,
+      "treated_rows": 6605.0,
+      "control_rows": 2325.0,
+      "observed_uplift_rate": 0.2924,
+      "incremental_outcomes": 1931.2753
+    },
+    {
+      "population_fraction": 0.9,
+      "rows": 10046.0,
+      "treated_rows": 7713.0,
+      "control_rows": 2333.0,
+      "observed_uplift_rate": 0.3108,
+      "incremental_outcomes": 2397.2452
+    },
+    {
+      "population_fraction": 1.0,
+      "rows": 11162.0,
+      "treated_rows": 8816.0,
+      "control_rows": 2346.0,
+      "observed_uplift_rate": 0.3139,
+      "incremental_outcomes": 2767.3205
+    }
+  ],
+  "uplift_deciles": [
+    {
+      "decile": 1.0,
+      "rows": 1116.0,
+      "mean_predicted_uplift": 0.0176,
+      "observed_uplift_rate": 0.0619
+    },
+    {
+      "decile": 2.0,
+      "rows": 1116.0,
+      "mean_predicted_uplift": -0.007,
+      "observed_uplift_rate": 0.2505
+    },
+    {
+      "decile": 3.0,
+      "rows": 1116.0,
+      "mean_predicted_uplift": -0.0169,
+      "observed_uplift_rate": 0.2513
+    },
+    {
+      "decile": 4.0,
+      "rows": 1116.0,
+      "mean_predicted_uplift": -0.0241,
+      "observed_uplift_rate": 0.3511
+    },
+    {
+      "decile": 5.0,
+      "rows": 1116.0,
+      "mean_predicted_uplift": -0.0305,
+      "observed_uplift_rate": 0.267
+    },
+    {
+      "decile": 6.0,
+      "rows": 1116.0,
+      "mean_predicted_uplift": -0.0369,
+      "observed_uplift_rate": 0.3151
+    },
+    {
+      "decile": 7.0,
+      "rows": 1116.0,
+      "mean_predicted_uplift": -0.0463,
+      "observed_uplift_rate": 0.3649
+    },
+    {
+      "decile": 8.0,
+      "rows": 1116.0,
+      "mean_predicted_uplift": -0.064,
+      "observed_uplift_rate": 0.3077
+    },
+    {
+      "decile": 9.0,
+      "rows": 1116.0,
+      "mean_predicted_uplift": -0.0977,
+      "observed_uplift_rate": 0.0275
+    },
+    {
+      "decile": 10.0,
+      "rows": 1118.0,
+      "mean_predicted_uplift": -0.1532,
+      "observed_uplift_rate": -0.0389
+    }
+  ],
+  "calibration": [
+    {
+      "bin": 1.0,
+      "mean_predicted_uplift": -0.1532,
+      "observed_uplift_rate": -0.0379,
+      "absolute_error": 0.1154
+    },
+    {
+      "bin": 2.0,
+      "mean_predicted_uplift": -0.0978,
+      "observed_uplift_rate": 0.0284,
+      "absolute_error": 0.1262
+    },
+    {
+      "bin": 3.0,
+      "mean_predicted_uplift": -0.0641,
+      "observed_uplift_rate": 0.2935,
+      "absolute_error": 0.3576
+    },
+    {
+      "bin": 4.0,
+      "mean_predicted_uplift": -0.0463,
+      "observed_uplift_rate": 0.3644,
+      "absolute_error": 0.4107
+    },
+    {
+      "bin": 5.0,
+      "mean_predicted_uplift": -0.0369,
+      "observed_uplift_rate": 0.311,
+      "absolute_error": 0.3479
+    },
+    {
+      "bin": 6.0,
+      "mean_predicted_uplift": -0.0305,
+      "observed_uplift_rate": 0.2685,
+      "absolute_error": 0.2991
+    },
+    {
+      "bin": 7.0,
+      "mean_predicted_uplift": -0.0241,
+      "observed_uplift_rate": 0.3511,
+      "absolute_error": 0.3752
+    },
+    {
+      "bin": 8.0,
+      "mean_predicted_uplift": -0.0169,
+      "observed_uplift_rate": 0.2504,
+      "absolute_error": 0.2673
+    },
+    {
+      "bin": 9.0,
+      "mean_predicted_uplift": -0.007,
+      "observed_uplift_rate": 0.2523,
+      "absolute_error": 0.2593
+    },
+    {
+      "bin": 10.0,
+      "mean_predicted_uplift": 0.0176,
+      "observed_uplift_rate": 0.0636,
+      "absolute_error": 0.046
+    }
+  ],
+  "propensity_summary": {
+    "min": 0.0265,
+    "p25": 0.316,
+    "median": 0.9452,
+    "mean": 0.7327,
+    "p75": 0.9792,
+    "max": 0.98
+  },
+  "uplift_summary": {
+    "min": -0.3334,
+    "p25": -0.0634,
+    "median": -0.0338,
+    "mean": -0.0459,
+    "p75": -0.0169,
+    "max": 0.1465
+  },
+  "prioritized_persuadables": [
+    {
+      "rank": 1,
+      "customer_id": "bank_row_2014",
+      "source_row": 2014,
+      "age": 46,
+      "balance": 1085.0,
+      "housing": "yes",
+      "loan": "yes",
+      "campaign": 2,
+      "uplift_score": 0.1465,
+      "propensity": 0.98,
+      "baseline_stay_probability": 0.0227,
+      "treated_stay_probability": 0.0033,
+      "best_treatment": "discount_5",
+      "expected_profit": 55.48,
+      "cost": 50.0,
+      "approved": true,
+      "recommendations": [
+        {
+          "treatment": "discount_5",
+          "uplift": 0.1055,
+          "expected_profit": 55.48,
+          "cost": 50.0
+        },
+        {
+          "treatment": "discount_10",
+          "uplift": 0.1465,
+          "expected_profit": 46.5,
+          "cost": 100.0
+        },
+        {
+          "treatment": "discount_15",
+          "uplift": 0.167,
+          "expected_profit": 17.01,
+          "cost": 150.0
+        },
+        {
+          "treatment": "discount_20",
+          "uplift": 0.1787,
+          "expected_profit": -21.27,
+          "cost": 200.0
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "customer_id": "bank_row_10122",
+      "source_row": 10122,
+      "age": 27,
+      "balance": 91.0,
+      "housing": "no",
+      "loan": "no",
+      "campaign": 6,
+      "uplift_score": 0.0939,
+      "propensity": 0.98,
+      "baseline_stay_probability": 0.0372,
+      "treated_stay_probability": 0.0077,
+      "best_treatment": "discount_5",
+      "expected_profit": 17.61,
+      "cost": 50.0,
+      "approved": true,
+      "recommendations": [
+        {
+          "treatment": "discount_5",
+          "uplift": 0.0676,
+          "expected_profit": 17.61,
+          "cost": 50.0
+        },
+        {
+          "treatment": "discount_10",
+          "uplift": 0.0939,
+          "expected_profit": -6.1,
+          "cost": 100.0
+        },
+        {
+          "treatment": "discount_15",
+          "uplift": 0.107,
+          "expected_profit": -42.95,
+          "cost": 150.0
+        },
+        {
+          "treatment": "discount_20",
+          "uplift": 0.1146,
+          "expected_profit": -85.44,
+          "cost": 200.0
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "customer_id": "bank_row_7731",
+      "source_row": 7731,
+      "age": 39,
+      "balance": -294.0,
+      "housing": "yes",
+      "loan": "no",
+      "campaign": 2,
+      "uplift_score": 0.0837,
+      "propensity": 0.0598,
+      "baseline_stay_probability": 0.0035,
+      "treated_stay_probability": 0.0091,
+      "best_treatment": "discount_5",
+      "expected_profit": 10.26,
+      "cost": 50.0,
+      "approved": true,
+      "recommendations": [
+        {
+          "treatment": "discount_5",
+          "uplift": 0.0603,
+          "expected_profit": 10.26,
+          "cost": 50.0
+        },
+        {
+          "treatment": "discount_10",
+          "uplift": 0.0837,
+          "expected_profit": -16.3,
+          "cost": 100.0
+        },
+        {
+          "treatment": "discount_15",
+          "uplift": 0.0954,
+          "expected_profit": -54.58,
+          "cost": 150.0
+        },
+        {
+          "treatment": "discount_20",
+          "uplift": 0.1021,
+          "expected_profit": -97.89,
+          "cost": 200.0
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "customer_id": "bank_row_9305",
+      "source_row": 9305,
+      "age": 58,
+      "balance": 610.0,
+      "housing": "yes",
+      "loan": "no",
+      "campaign": 2,
+      "uplift_score": 0.0717,
+      "propensity": 0.8957,
+      "baseline_stay_probability": 0.0004,
+      "treated_stay_probability": 0.0012,
+      "best_treatment": "discount_5",
+      "expected_profit": 1.62,
+      "cost": 50.0,
+      "approved": true,
+      "recommendations": [
+        {
+          "treatment": "discount_5",
+          "uplift": 0.0516,
+          "expected_profit": 1.62,
+          "cost": 50.0
+        },
+        {
+          "treatment": "discount_10",
+          "uplift": 0.0717,
+          "expected_profit": -28.3,
+          "cost": 100.0
+        },
+        {
+          "treatment": "discount_15",
+          "uplift": 0.0817,
+          "expected_profit": -68.26,
+          "cost": 150.0
+        },
+        {
+          "treatment": "discount_20",
+          "uplift": 0.0875,
+          "expected_profit": -112.53,
+          "cost": 200.0
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "customer_id": "bank_row_10975",
+      "source_row": 10975,
+      "age": 41,
+      "balance": 183.0,
+      "housing": "yes",
+      "loan": "no",
+      "campaign": 1,
+      "uplift_score": 0.0706,
+      "propensity": 0.8923,
+      "baseline_stay_probability": 0.0005,
+      "treated_stay_probability": 0.0024,
+      "best_treatment": "discount_5",
+      "expected_profit": 0.83,
+      "cost": 50.0,
+      "approved": true,
+      "recommendations": [
+        {
+          "treatment": "discount_5",
+          "uplift": 0.0508,
+          "expected_profit": 0.83,
+          "cost": 50.0
+        },
+        {
+          "treatment": "discount_10",
+          "uplift": 0.0706,
+          "expected_profit": -29.4,
+          "cost": 100.0
+        },
+        {
+          "treatment": "discount_15",
+          "uplift": 0.0805,
+          "expected_profit": -69.52,
+          "cost": 150.0
+        },
+        {
+          "treatment": "discount_20",
+          "uplift": 0.0861,
+          "expected_profit": -113.87,
+          "cost": 200.0
+        }
+      ]
+    }
+  ],
+  "caveats": [
+    "Individual uplift accuracy cannot be directly observed without randomized counterfactual outcomes.",
+    "bank.csv has no true randomized discount assignment; contact != 'unknown' is used as the MVP outreach proxy.",
+    "duration is excluded because it is a post-contact leakage feature.",
+    "AUUC and Qini are observational diagnostics here, not production causal validity guarantees."
+  ]
+}

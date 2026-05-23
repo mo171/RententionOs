@@ -264,6 +264,10 @@ def save_artifacts(artifacts: UpliftArtifacts) -> None:
     with open(METADATA_ARTIFACT_PATH, "w", encoding="utf-8") as handle:
         json.dump(metadata, handle, indent=2)
 
+    from metrics.causal_metrics import write_metrics_bundle
+
+    write_metrics_bundle(artifacts)
+
 
 def load_artifacts() -> UpliftArtifacts | None:
     if not os.path.exists(MODEL_ARTIFACT_PATH):

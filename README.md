@@ -85,6 +85,16 @@ backend/artifacts/causal/uplift_artifacts.pkl
 backend/artifacts/causal/uplift_metadata.json
 ```
 
+Model evaluation outputs are saved under:
+
+```text
+backend/metrics/uplift_model_metrics.json
+backend/metrics/uplift_model_report.md
+backend/metrics/persuadable_customers.csv
+```
+
+The metrics bundle includes AUUC, Qini coefficient, churn precision/recall/AUC-ROC, uplift deciles, calibration diagnostics, and the profit-guarded prioritized persuadable list. It is regenerated whenever causal artifacts are saved during retraining.
+
 Runtime behavior:
 
 ```text

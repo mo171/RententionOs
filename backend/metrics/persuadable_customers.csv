@@ -1,0 +1,6 @@
+rank,customer_id,source_row,age,balance,housing,loan,campaign,uplift_score,propensity,baseline_stay_probability,treated_stay_probability,best_treatment,expected_profit,cost,approved
+1,bank_row_2014,2014,46,1085.0,yes,yes,2,0.1465,0.98,0.0227,0.0033,discount_5,55.48,50.0,True
+2,bank_row_10122,10122,27,91.0,no,no,6,0.0939,0.98,0.0372,0.0077,discount_5,17.61,50.0,True
+3,bank_row_7731,7731,39,-294.0,yes,no,2,0.0837,0.0598,0.0035,0.0091,discount_5,10.26,50.0,True
+4,bank_row_9305,9305,58,610.0,yes,no,2,0.0717,0.8957,0.0004,0.0012,discount_5,1.62,50.0,True
+5,bank_row_10975,10975,41,183.0,yes,no,1,0.0706,0.8923,0.0005,0.0024,discount_5,0.83,50.0,True

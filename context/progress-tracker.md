@@ -42,6 +42,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - `backend/test.py` full pipeline test: compliance approval → strategy channel/timing → hard-stop path
 - Causal uplift MVP: stdlib X-learner-style service over `backend/data/bank.csv`, leakage exclusion for `duration`, treatment proxy `contact != "unknown"`, treatment optimizer, and FastAPI endpoints `/api/causal/snapshot`, `/api/causal/retrain`, `/api/causal/score`
 - Saved causal model artifacts: `backend/artifacts/causal/uplift_artifacts.pkl` and `backend/artifacts/causal/uplift_metadata.json`
+- Backend causal metrics bundle: `backend/metrics/uplift_model_metrics.json`, `uplift_model_report.md`, and `persuadable_customers.csv` generated from the saved `.pkl` artifact with AUUC, Qini, churn precision/recall/AUC-ROC, and profit-guarded persuadable ranking
 - `/causal-model` live snapshot wiring: `hooks/use-live-causal-model.ts` fetches backend snapshot and `model-metrics-strip.tsx` calls the retrain endpoint
 - `backend/test.py` full pipeline test: compliance → strategy → writer → reviewer → dispatch (Resend email)
 - Message Writer (Node 3): `services/writer/writer_service.py`, HTML email template, `writer_agent.py`
@@ -134,6 +135,12 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Session Notes
 
+- 2026-05-23 - GitHub user `YK1218` (`fs22ai007yashkdhasal@gmail.com`) added the backend causal metrics bundle:
+  - `backend/metrics/causal_metrics.py` evaluates the saved `.pkl` uplift artifact and writes AUUC, Qini, churn precision/recall/AUC-ROC, uplift deciles, calibration, propensity, and profit-guardrail diagnostics.
+  - `backend/metrics/x_learner_reference.py` documents the sklearn/XGBoost production X-Learner implementation path.
+  - `backend/metrics/uplift_model_metrics.json`, `uplift_model_report.md`, and `persuadable_customers.csv` contain the current generated metrics and profit-approved persuadable list.
+  - `backend/services/causal/uplift_service.py` now regenerates the metrics bundle whenever uplift artifacts are saved.
+  - `README.md` now documents the backend metrics outputs.
 - Dev server is running on `npm run dev` at port 3000.
 - The overview route is at `/overview` (served by `app/(dashboard)/overview/page.tsx`).
 - The causal model route is at `/causal-model` (served by `app/(dashboard)/causal-model/page.tsx`).
