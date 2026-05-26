@@ -18,6 +18,13 @@ def strategy_node(state: InterventionGraphState) -> InterventionGraphState:
     if isinstance(payload, dict):
         payload = InterventionPayload(**payload)
 
+    # --- Profit Guardrail ---
+    # Formula: Expected Profit = (Retention Probability × LTV) − Intervention Cost
+    # We evaluate expected_profit from the payload.
+    if payload.expected_profit <= 0:
+        print(f"[Strategy Guardrail] Intervention rejected. Expected profit ({payload.expected_profit}) is <= 0.")
+        return {**state, "should_intervene": False}
+
     compliance_result = state.get("compliance_result")
     if compliance_result is None:
         raise ValueError("strategy_node requires compliance_result from Node 1")

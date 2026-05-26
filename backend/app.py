@@ -22,10 +22,13 @@ from services.ltv.ltv_service import (
     retrain_ltv_model,
     score_customer as score_ltv_customer,
 )
+from api.inngest_routes import router as inngest_router
 
 load_dotenv()
 
 app = FastAPI(title="RetentionOS Agentic Backend", version="1.0.0")
+
+app.include_router(inngest_router)
 
 app.add_middleware(
     CORSMiddleware,

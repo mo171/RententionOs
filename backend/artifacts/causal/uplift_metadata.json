@@ -1,17 +1,15 @@
 {
-  "model_type": "stdlib_x_learner_mvp",
-  "data_path": "backend/data/bank.csv",
-  "rows": 11162,
-  "treatment_definition": "contact != 'unknown'",
-  "outcome_definition": "deposit == 'yes'",
+  "model_type": "xgboost_xlearner_v1",
+  "data_path": "backend/data/indian_bank_profiles.csv",
+  "features_count": 42,
+  "outcome": "deposit == 'yes'",
+  "treatment": "contact != 'unknown'",
   "excluded_columns": [
-    "contact",
+    "duration",
     "deposit",
-    "duration"
+    "contact",
+    "segment"
   ],
-  "trained_at": "2026-05-22T17:17:05.210740Z",
-  "artifact_version": 1,
-  "model_artifact_path": "backend/artifacts/causal/uplift_artifacts.pkl",
-  "metadata_artifact_path": "backend/artifacts/causal/uplift_metadata.json",
-  "caution": "bank.csv lacks randomized discount assignment; this is an MVP proxy until real intervention logs are collected."
+  "trained_at": "2026-05-26T06:36:17.556308Z",
+  "artifact_version": 1
 }

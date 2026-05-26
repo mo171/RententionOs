@@ -14,6 +14,9 @@ import { ConfusionMatrixChart } from "@/components/causal-model/confusion-matrix
 import { LiftDecileChart } from "@/components/causal-model/lift-decile-chart";
 import { CausalDagChart } from "@/components/causal-model/causal-dag-chart";
 import { HoldoutOutcomes } from "@/components/causal-model/holdout-outcomes";
+import { LiveRiskFeed } from "@/components/LiveRiskFeed";
+import { FinancialImpactMap } from "@/components/FinancialImpactMap";
+import { GraphVisualization } from "@/components/GraphVisualization";
 
 export default function CausalModelPage() {
   useLiveCausalModel();
@@ -21,8 +24,15 @@ export default function CausalModelPage() {
   return (
     <div className="flex flex-col gap-4 max-w-[1400px] pb-8">
       <ModelMetricsStrip />
+      
+      {/* Gatekeeper Architecture MVP Components */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <LiveRiskFeed />
+        <FinancialImpactMap />
+        <GraphVisualization />
+      </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-4 mt-4">
         <ChurnDriversChart />
         <QiniCurveChart />
         <CalibrationChart />
