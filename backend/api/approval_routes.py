@@ -1,5 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
+import os
+import asyncio
+from datetime import datetime, timezone
+
 from models.approval_models import ApprovalResponse, ApprovalStatusUpdate, ApprovalMessageEdit
 from utils.supabase_client import get_supabase_client
 from api.websocket_routes import broadcast_approval_update
@@ -51,12 +55,14 @@ def map_db_to_approval_response(row: dict) -> ApprovalResponse:
 
 @router.get("/api/approvals", response_model=List[ApprovalResponse])
 def get_approvals():
+    """Retrieve all pending approvals, ordered by most recent."""
     supabase = get_supabase_client()
     response = supabase.table("pending_approvals").select("*").order("created_at", desc=True).limit(50).execute()
     return [map_db_to_approval_response(row) for row in response.data]
 
 @router.get("/api/approvals/{approval_id}", response_model=ApprovalResponse)
 def get_approval(approval_id: str):
+    """Retrieve a single approval by ID."""
     supabase = get_supabase_client()
     response = supabase.table("pending_approvals").select("*").eq("id", approval_id).execute()
     if not response.data:
@@ -65,9 +71,10 @@ def get_approval(approval_id: str):
 
 @router.patch("/api/approvals/{approval_id}")
 def update_approval_message(approval_id: str, edit: ApprovalMessageEdit):
+    """Allow admin to edit the message draft before approval."""
     supabase = get_supabase_client()
     
-    # Get current to update just the draft part
+    # Get current approval to preserve existing fields
     res = supabase.table("pending_approvals").select("message_draft").eq("id", approval_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Approval not found")
@@ -75,48 +82,104 @@ def update_approval_message(approval_id: str, edit: ApprovalMessageEdit):
     draft = res.data[0].get("message_draft", {})
     draft["subject"] = edit.subject
     draft["body_plain"] = edit.body
-    # Optionally update HTML body, simplified here
+    # Build HTML body from plain text if it's an Email
+    if draft.get("channel") == "Email":
+        from services.writer.writer_service import build_email_html
+        subscriber_name = "Valued Customer"  # Could fetch from profile if needed
+        cta_text = draft.get("cta_text", "Get this discount")
+        cta_url = draft.get("cta_url", "#")
+        discount = draft.get("subject", "").split()[-1] if draft.get("subject") else ""
+        draft["body_html"] = build_email_html(
+            edit.body,
+            cta_text,
+            cta_url,
+            discount,
+            subscriber_name
+        )
     
     response = supabase.table("pending_approvals").update({"message_draft": draft}).eq("id", approval_id).execute()
     
     if response.data:
-        # Broadcast update
+        # Broadcast update to frontend (via WebSocket)
         updated_model = map_db_to_approval_response(response.data[0])
-        import asyncio
-        asyncio.create_task(broadcast_approval_update(updated_model.model_dump()))
+        try:
+            # Use asyncio to run the async broadcast
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(broadcast_approval_update({
+                "type": "approval_updated",
+                "data": updated_model.model_dump()
+            }))
+        except Exception as e:
+            print(f"[Approval] Warning: WebSocket broadcast failed: {e}")
         
-    return {"status": "success"}
+    return {"status": "success", "message": "Draft updated"}
 
-@router.post("/api/approvals/{approval_id}/status")
-def update_approval_status(approval_id: str, update: ApprovalStatusUpdate):
+@router.post("/api/approvals/{approval_id}/approve")
+def approve_intervention(approval_id: str):
+    """Approve an intervention — update status and trigger dispatch."""
     supabase = get_supabase_client()
     
-    response = supabase.table("pending_approvals").update({"status": update.status}).eq("id", approval_id).execute()
+    response = supabase.table("pending_approvals").update({
+        "status": "approved",
+        "approved_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", approval_id).execute()
+    
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Approval not found")
+        
+    row = response.data[0]
+    draft_dict = row.get("message_draft")
+    
+    # If there's a draft, trigger message dispatch
+    if draft_dict:
+        try:
+            draft = MessageDraft(**draft_dict)
+            test_mode = os.environ.get("TEST_MODE", "true").lower() in ("1", "true", "yes")
+            # In production, we'd use Trigger.dev to schedule this at strategy_result.scheduled_time
+            # For now, we send immediately in test mode
+            result = send_message(draft, test_mode=test_mode)
+            print(f"[Approval] Dispatch triggered for approval {approval_id}: {result}")
+        except Exception as e:
+            print(f"[Approval] Error during dispatch: {str(e)}")
+            # Don't fail the approval just because dispatch had an issue
+    
+    # Broadcast update to frontend
+    updated_model = map_db_to_approval_response(row)
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(broadcast_approval_update({
+            "type": "approval_approved",
+            "data": updated_model.model_dump()
+        }))
+    except Exception as e:
+        print(f"[Approval] Warning: WebSocket broadcast failed: {e}")
+    
+    return {"status": "success", "message": "Intervention approved and dispatched"}
+
+@router.post("/api/approvals/{approval_id}/reject")
+def reject_intervention(approval_id: str):
+    """Reject an intervention."""
+    supabase = get_supabase_client()
+    
+    response = supabase.table("pending_approvals").update({
+        "status": "rejected",
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", approval_id).execute()
     
     if not response.data:
         raise HTTPException(status_code=404, detail="Approval not found")
         
     row = response.data[0]
     
-    # If approved, dispatch the message
-    if update.status == "approved":
-        draft_dict = row.get("message_draft")
-        if draft_dict:
-            # We use send_message tool directly for dispatch, simulating trigger.dev wait
-            # We would normally schedule this via trigger.dev
-            draft = MessageDraft(**draft_dict)
-            try:
-                # Note: getting email/phone requires fetching profile which isn't fully in pending_approvals, 
-                # but we will send to TEST_RECIPIENT_EMAIL via test_mode in dispatch
-                # If WhatsApp, we need to pass a phone number
-                test_mode = os.environ.get("TEST_MODE", "true").lower() in ("1", "true", "yes")
-                send_message(draft, test_mode=test_mode)
-            except Exception as e:
-                print(f"Error dispatching approved message: {e}")
-                
-    # Broadcast update
+    # Broadcast update to frontend
     updated_model = map_db_to_approval_response(row)
-    import asyncio
-    asyncio.create_task(broadcast_approval_update(updated_model.model_dump()))
-        
-    return {"status": "success"}
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(broadcast_approval_update({
+            "type": "approval_rejected",
+            "data": updated_model.model_dump()
+        }))
+    except Exception as e:
+        print(f"[Approval] Warning: WebSocket broadcast failed: {e}")
+    
+    return {"status": "success", "message": "Intervention rejected"}

@@ -4,12 +4,14 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Feature Development — Agentic Backend Integration
+- **Approval API Implementation** — Backend endpoints for `/api/approvals` and `/api/interventions/start` to persist pending approvals.
 
 ## Current Goal
 
-- Wire **human-in-the-loop** on `/approvals` before customer send: graph produces drafts → admin reviews/edits → Approve triggers dispatch at `scheduled_time`
-- Connect Trigger.dev orchestration and frontend live streams
+- Implement approval API endpoints (`POST /api/interventions/start`, `GET/PATCH /api/approvals`, `POST /api/approvals/:id/status`).
+- Wire frontend WebSocket (`/ws/approvals`) to stream live approvals into Zustand store.
+- Run full E2E tests with approvals in the queue (no auto-dispatch in production).
+- Deploy to staging with human-in-the-loop enforcement.
 
 ## Completed
 

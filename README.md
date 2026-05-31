@@ -34,15 +34,47 @@ Feedback Loop
 
 ## What Is Built
 
-- Next.js dashboard with `/overview`, `/approvals`, and `/causal-model`.
+### Frontend Dashboard
+- Next.js dashboard with `/overview`, `/approvals`, and `/causal-model` routes.
 - Zustand stores for dashboard, approvals, and causal model state.
-- FastAPI backend in `backend/app.py`.
-- CRAG compliance agent and strategy agent groundwork using LangGraph.
-- LTV/CFVS eligibility gate MVP over synthetic Indian banking customer data.
-- Churn prediction MVP over `backend/data/bank.csv`.
-- Causal uplift MVP over `backend/data/bank.csv`.
-- Causal dashboard snapshot API connected to the frontend causal model page.
-- Retrain button wired to the backend causal retrain endpoint.
+- Master-detail split layout on `/approvals` for reviewing interventions.
+- Route-aware top navbar with dynamic titles and context-aware actions.
+- Live data hooks (WebSocket stubs) for approvals, dashboard metrics, and causal updates.
+- GPU-safe hover animations using `transform: translateY` for performance.
+- CSS Containment on scroll container to prevent unnecessary repaints.
+
+### Core ML Pipeline
+- **LTV/CFVS Eligibility Gate MVP**: Historical + predictive LTV scoring, default-risk penalty, and customer financial value scoring (0-100) over synthetic Indian banking data.
+- **Churn Prediction MVP**: Logistic classifier trained on Bank Marketing dataset using deposit as churn proxy.
+- **Causal Uplift MVP**: X-learner-style multi-treatment model identifying persuadable customers with profit-optimized treatment recommendations.
+
+### Agentic Intervention Pipeline (Full LangGraph)
+- **Compliance Agent (Node 1)**: CRAG-based RAG pipeline with multi-query retrieval, pgvector search, Cohere reranking, LLM grader, and compliance verdict (`should_intervene` flag).
+- **Strategy Agent (Node 2)**: Determines intervention channel (email/SMS/push), optimal timing (now/delay), and strategy flags (e.g., hard-stop paths).
+- **Message Writer Agent (Node 3)**: Drafts HTML email with personalized subject and body using LLM context.
+- **Meta Tribe Reviewer Agent (Node 4)**: LLM-based reviewer with corrective loop (max 3 revisions) for quality assurance.
+- **Dispatch Agent**: Sends validated messages via Resend (email), Twilio (SMS), or push notifications.
+- Unified LangGraph flow: `compliance → strategy → writer ↔ reviewer → pending approval` (production halt before dispatch).
+
+### Human-in-the-Loop Approval System
+- `/approvals` page with pending interventions awaiting admin review.
+- Admin can review compliance reasoning, channel, scheduled send time, and message preview.
+- Admin can edit message copy before approval (UI built, API pending).
+- Admin can Approve (queues for send at `scheduled_time`) or Reject (dismisses intervention).
+- Production rule: no customer message is sent until admin approval.
+
+### APIs and Backend Services
+- **LTV**: `/api/ltv/metrics`, `/api/ltv/retrain`, `/api/ltv/score`
+- **Churn**: `/api/churn/metrics`, `/api/churn/retrain`, `/api/churn/score`
+- **Causal**: `/api/causal/snapshot`, `/api/causal/retrain`, `/api/causal/score`
+- **Interventions** (draft): `/api/interventions/start` (backends nodes 1–4), `/api/approvals`, `/api/approvals/:id/status`
+- **WebSocket** (stub): `/ws/approvals` (pending live approval stream), `/ws/metrics` (pending live dashboard stream)
+
+### Data Persistence
+- Model artifacts saved to `backend/artifacts/{ltv,churn,causal}/`
+- Metrics bundles (JSON, CSV, Markdown reports) saved to `backend/metrics/`
+- Supabase PostgreSQL backend with migrations for policy vectors, policy chunks, subscribers, interactions, and pending approvals.
+- Resend email delivery with verified domain support.
 
 ---
 
@@ -216,6 +248,164 @@ If missing, train from bank.csv and save artifact
 ```
 
 `POST /api/causal/retrain` always retrains from `bank.csv`, overwrites the saved artifact, refreshes the in-memory cache, and returns the latest dashboard snapshot.
+
+---
+
+## Human-in-the-Loop Approval System
+
+RetentionOS implements a strict approval gate before any customer outreach:
+
+### Approval Flow
+
+| Step | Actor | Where | Status |
+|------|-------|-------|--------|
+| 1. Agents draft intervention | LangGraph nodes 1–4 | Backend | **Done** |
+| 2. Queue pending approval | Push to `/approvals` | Backend → Frontend WebSocket | **UI done**; API pending |
+| 3. Admin reviews | Compliance reasoning, channel, `scheduled_time`, message preview | `/approvals` page | **Done** |
+| 4. Admin edits message | Update subject/body before Approve | `approval-detail-view.tsx` | **UI done**; API `PATCH` pending |
+| 5. Admin Approve/Reject | Approve queues for send; Reject dismisses | `/approvals` page detail panel | **UI done**; API pending |
+| 6. Send to customer | Resend (email) at `scheduled_time` | Trigger.dev + Resend | **Done in test.py only**; production ready after step 5 |
+
+### Approval API (In Progress)
+
+| Method | Endpoint | Purpose | Status |
+|--------|----------|---------|--------|
+| `POST` | `/api/interventions/start` | Trigger agents 1–4 and persist pending approval | Pending |
+| `GET` | `/api/approvals` | List pending approvals | Pending |
+| `PATCH` | `/api/approvals/:id` | Update message preview before approval | Pending |
+| `POST` | `/api/approvals/:id/status` | Set status to `approved` or `dismissed` | Pending |
+| `WS` | `/ws/approvals` | Stream approval updates to frontend | Stub implemented |
+
+### Frontend Approval Components
+
+- `components/approval-row.tsx`: Single approval row in queue (compact view).
+- `components/approval-detail-view.tsx`: Master-detail panel for full review and edit.
+- `components/approval-message-edit.tsx`: Inline message subject/body editor.
+- `hooks/use-live-approvals.ts`: WebSocket hook (stub) to stream approvals into Zustand store.
+- `store/approvals-store.ts`: Zustand state for pending queue and detail view.
+
+### Production Rule
+
+**No customer message leaves the backend until admin approval.** Dev `test.py` runs the full graph including dispatch for E2E validation. Production deployment must enforce the halt before `dispatch_agent` and queue the pending approval.
+
+---
+
+## Agentic Intervention Pipeline
+
+The intervention graph processes high-value at-risk customers through a 4-node compliance → strategy → draft → review workflow, then waits for human approval before dispatch.
+
+### Node 1: Compliance Agent (CRAG)
+
+**File:** `backend/services/agents/compliance_agent.py`
+
+Purpose: Determine if the intervention complies with policy and regulatory rules.
+
+**RAG Pipeline** (`backend/services/rag/compliance_service.py`):
+1. **Multi-query expansion**: Rephrase the customer scenario into 3–5 policy-relevant queries.
+2. **Chunk retrieval**: Use pgvector to retrieve top-K policy chunks from `policy_chunks` table (RPC: `match_policy_chunks`).
+3. **Reranking**: Cohere rerank + reciprocal rank fusion (RRF) for multi-query results.
+4. **LLM grader**: Assess retrieved chunk relevance; fallback to local cosine similarity if pgvector returns empty.
+5. **Reasoning trace**: LLM generates compliance reasoning (stored in approval context).
+6. **Verdict**: `should_intervene: true/false` and reasoning.
+
+**Output:** `ComplianceVerdict(should_intervene, reasoning)`
+
+**Known Issue:** If `policy_chunks` table is small or pgvector index has low effectiveness, retrieval may return empty. Workaround: run `backend/migrations/004_fix_policy_vector_index.sql` on Supabase or use local cosine fallback (automatic).
+
+### Node 2: Strategy Agent
+
+**File:** `backend/services/agents/strategy_agent.py`
+
+Purpose: Select intervention channel (email/SMS/push), optimal send time, and strategy flags.
+
+**Inputs:**
+- Compliance verdict
+- Customer churn risk tier
+- LTV/CFVS score
+- Causal uplift segment
+
+**Outputs:**
+- `channel`: email | sms | push
+- `scheduled_time`: ISO timestamp (now or future)
+- `strategy_flags`: e.g., hard-stop if causal segment is Lost Cause
+- `intervention_reason`: human-readable strategy explanation
+
+**Conditional Graph:** If compliance hard-stops, strategy is skipped (rule-based hard-stop path).
+
+### Node 3: Message Writer
+
+**File:** `backend/services/writer/writer_service.py`
+
+Purpose: Draft personalized intervention message.
+
+**Inputs:**
+- Customer profile (name, segment)
+- Churn risk
+- Causal uplift score
+- Strategy context
+
+**Template:** HTML email with dynamic subject and body generated by LLM.
+
+**Outputs:**
+- `subject`: Email subject line
+- `body`: HTML email body
+- `channel`: Reaffirm channel (email/SMS/push)
+
+**Rule:** Writer drafts only; does not send to Resend directly.
+
+### Node 4: Meta Tribe Reviewer
+
+**File:** `backend/services/meta_tribe/meta_tribe_service.py`
+
+Purpose: Quality-check draft message for tone, clarity, and policy adherence.
+
+**Corrective Loop:**
+- LLM reviews draft.
+- If `quality_score < threshold`, request revision from writer (recursive call).
+- Max 3 revisions per intervention.
+
+**Outputs:**
+- `quality_score`: 0–1
+- `feedback`: Revision notes (if any)
+- `final_message`: Approved draft
+
+**Rule:** Reviewer approves drafts; does not send.
+
+### Full Graph Flow
+
+```text
+Customer payload (churn risk, LTV, uplift score)
+   |
+   v
+Compliance Agent (RAG verdict)
+   | compliance_fail → hard-stop (no send)
+   | compliance_pass ↓
+Strategy Agent (channel, timing)
+   |
+   v
+Writer Agent (draft message)
+   |
+   v
+Reviewer Agent (quality check → revise if needed)
+   |
+   v
+Pending Approval (queue in database)
+   | admin_reject → dismiss
+   | admin_approve ↓
+Trigger.dev wait_until(scheduled_time)
+   |
+   v
+Dispatch (Resend email, Twilio SMS, push)
+   |
+   v
+Outcome tracking
+```
+
+### Test Files
+
+- `backend/test_writer.py`: Writer agent E2E with LLM revision.
+- `backend/test_reviewer.py`: Reviewer agent corrective loop.
+- `backend/test.py`: Full pipeline including Resend email dispatch (dev only).
 
 ---
 
@@ -433,40 +623,227 @@ The scoring response includes:
 
 ---
 
-## Environment Variables
+## Running the Full Agentic Pipeline (Dev)
 
-The causal MVP can run from `bank.csv` without external keys.
+### End-to-End Test: Compliance → Strategy → Writer → Reviewer → Resend
 
-Agentic/RAG features need:
+From the backend directory:
+
+```powershell
+..\.venv\Scripts\python.exe -m pip install -r requirements-agentic.txt
+..\.venv\Scripts\python.exe test.py
+```
+
+This runs the full LangGraph pipeline:
+
+1. **Compliance Agent**: Loads policy chunks from Supabase, retrieves + grades against policy, outputs `should_intervene`.
+2. **Strategy Agent**: Selects channel and timing.
+3. **Message Writer**: Drafts HTML email.
+4. **Meta Tribe Reviewer**: Quality checks and revises (up to 3 times).
+5. **Dispatch**: Sends email via Resend to `TEST_RECIPIENT_EMAIL` (configured in `.env`).
+
+**Expected output:**
+- Compliance reasoning trace
+- Strategy channel + scheduled_time
+- Final message subject + body
+- Email sent log
+
+**Note:** `test.py` includes dispatch for dev verification. Production deployment must halt before dispatch and queue the pending approval for admin review.
+
+### Configuration for Agentic Tests
+
+Create `backend/.env`:
 
 ```env
-OPENAI_API_KEY=
-SUPABASE_URL=
-SUPABASE_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-LANGCHAIN_API_KEY=
-TRIGGER_API_KEY=
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# LLM
+OPENAI_API_KEY=sk-...
+COHERE_API_KEY=...
+
+# Notifications
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=onboarding@resend.dev
+TEST_RECIPIENT_EMAIL=your-email@example.com
+
+# LangChain (optional)
+LANGCHAIN_API_KEY=...
+
+# Trigger.dev (optional)
+TRIGGER_API_KEY=...
 ```
+
+### Minimal Test (LTV + Churn + Causal Only)
+
+If agentic dependencies are not installed, the core ML pipeline still works:
+
+```powershell
+# No agentic dependencies needed
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/api/ltv/metrics
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/api/churn/metrics
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/api/causal/snapshot
+```
+
+---
+
+## Approvals Management (API — In Progress)
+
+### Pending API Endpoints
+
+These endpoints are UI-ready but backend implementation is pending:
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/interventions/start` | Trigger agents 1–4, persist pending approval |
+| `GET` | `/api/approvals` | List all pending approvals |
+| `GET` | `/api/approvals/:id` | Get single approval detail |
+| `PATCH` | `/api/approvals/:id` | Update message preview or other fields |
+| `POST` | `/api/approvals/:id/status` | Set status (`approved`, `dismissed`, `sent`, `failed`) |
+| `WS` | `/ws/approvals` | Stream approval events to connected clients |
+
+### WebSocket Stub Implementation
+
+Frontend hook `hooks/use-live-approvals.ts` has a WebSocket stub block:
+
+```typescript
+// PENDING: Live Data
+// ws.onmessage = (event) => {
+//   const approval = JSON.parse(event.data);
+//   store.addApproval(approval);
+// };
+```
+
+When the backend is ready, uncomment and wire to `store.addApproval()`. Zero UI rewrites are needed.
+
+---
+
+## Environment Variables
+
+### Core ML Pipeline (Required for causal/churn/LTV)
+
+None required for the causal MVP — it runs from `bank.csv` without external keys.
+
+### Agentic/RAG Features (Optional, for compliance agent + strategy agent + writer + reviewer)
+
+```env
+# LLM (OpenAI required for writer/reviewer)
+OPENAI_API_KEY=sk-...
+
+# Supabase (PostgreSQL + pgvector)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Embeddings & Reranking
+COHERE_API_KEY=...
+
+# LangChain tracing (optional)
+LANGCHAIN_API_KEY=...
+
+# Email delivery
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=onboarding@resend.dev  # Must be verified at resend.com/domains
+TEST_RECIPIENT_EMAIL=your-email@example.com  # Dev recipient for test.py
+
+# SMS delivery (Twilio stub in code)
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+
+# Task orchestration (optional, future)
+TRIGGER_API_KEY=...
+```
+
+### Notes on Python Versions
+
+- Python 3.10–3.12: Recommended for agentic stack (Supabase dependencies safe).
+- Python 3.14+: Causal ML pipeline works fine; agentic stack may encounter `pyiceberg` compilation issues (requires Microsoft C++ Build Tools).
 
 ---
 
 ## Verification
 
-Known verification status:
+Current implementation status:
 
-- Backend causal routes import and register successfully.
-- `/api/causal/snapshot` returns a snapshot for 11,162 rows from `bank.csv`.
-- Frontend production build passes with `npm.cmd run build`.
-- `npm.cmd run lint` currently fails on pre-existing unrelated lint errors in approval/UI/mobile files.
+- ✅ Backend causal routes import and register successfully.
+- ✅ `/api/causal/snapshot` returns a snapshot for 11,162 rows from `bank.csv`.
+- ✅ `/api/churn/metrics` trains and scores churn model.
+- ✅ `/api/ltv/metrics` trains and scores LTV/CFVS model.
+- ✅ Frontend production build passes with `npm.cmd run build`.
+- ✅ Compliance Agent (Node 1) RAG pipeline tested in `backend/test.py`.
+- ✅ Strategy Agent (Node 2) tested in full pipeline.
+- ✅ Message Writer (Node 3) tested in `backend/test_writer.py`.
+- ✅ Meta Tribe Reviewer (Node 4) tested in `backend/test_reviewer.py`.
+- ✅ Full LangGraph pipeline end-to-end (nodes 1–4 + Resend dispatch) verified in `backend/test.py`.
+- ⚠️  `/approvals` UI is complete; backend approval API endpoints pending.
+- ⚠️  WebSocket stubs (`/ws/approvals`, `/ws/metrics`) in frontend; backend implementation pending.
+- ⚠️  `npm.cmd run lint` has pre-existing unrelated errors in approval/UI/mobile components.
 
 ---
 
-## Development Rules
+## Known Issues and Operational Notes
 
-- Keep FastAPI route handlers thin.
-- Put business logic in `backend/services`.
-- Put API schemas in `backend/models`.
-- Keep frontend business state in Zustand stores.
-- Do not refetch stable data repeatedly from components.
-- Exclude post-treatment leakage fields from model covariates.
-- Long-running production retraining should move to background orchestration.
+### pgvector Retrieval Empty Results (Not a CRAG Logic Bug)
+
+**Symptom:** `Retrieved 0 unique chunks` → compliance hard-stops → looks like RAG failed.
+
+**Root Cause:** IVFFlat index on `policy_chunks` table with `lists = 100` performs poorly when the table has very few rows (common in early dev and `test.py`). Ingest/upsert can succeed while `match_policy_chunks` RPC returns `[]`.
+
+**Fix:** Run `backend/migrations/004_fix_policy_vector_index.sql` on Supabase. Alternatively, `compliance_service.py` automatically falls back to local cosine similarity when RPC returns empty results (see log: `RPC empty - used local cosine fallback`).
+
+**Agent Rule:** Do not refactor `compliance_service`, grader, or prompts for this symptom. Verify `policy_chunks` row count and retrieval status first. See `context/AGENTS.md` § Backend CRAG / RAG.
+
+### Resend Email Verification (Operational)
+
+- **FROM:** Must be a verified domain at resend.com/domains, or sandbox `onboarding@resend.dev`.
+- **TO:** Dev recipient (e.g., Gmail) can be any address. Tests use `TEST_RECIPIENT_EMAIL` from `.env`.
+- **First send:** May take 1–2 seconds if Resend account is new or domain is cold.
+
+### Message Edit API Not Yet Wired
+
+- UI (`approval-detail-view.tsx`, `approval-message-edit.tsx`) is complete.
+- `PATCH /api/approvals/:id` API call is stubbed (`// PENDING`).
+- When backend implements, frontend requires zero rewrites.
+
+### Approval Status Tracking
+
+Production rules:
+- `pending`: Intervention drafted, awaiting admin review.
+- `approved`: Admin approved; message is queued for send at `scheduled_time`.
+- `dismissed`: Admin rejected; intervention is dropped.
+- `sent`: Message successfully delivered.
+- `failed`: Delivery error (manual retry or escalation needed).
+
+---
+
+## Architecture Decisions and Best Practices
+
+### Routing & State Management
+- **Sidebar routing**: Determined purely by `usePathname()` — deterministic, no client state needed.
+- **Zustand for live data**: All business state lives in stores (`dashboard-store`, `approvals-store`, `causal-model-store`). Components are consumers only. Live data hookups require only hook changes, not component rewrites.
+
+### Performance & Rendering
+- **GPU-safe hover animations**: All cards use `transform: translateY` + `will-change: transform`. `box-shadow` and `background-color` transitions were removed.
+- **CSS Containment**: Main scrollable `<main>` uses `contain: layout style` to prevent sidebar/topnav repaints during scroll.
+
+### Backend Architecture
+- **Thin FastAPI routes**: Business logic lives in `backend/services`.
+- **Schemas in models**: All request/response pydantic models in `backend/models`.
+- **Separate services**: LTV, churn, causal, compliance, strategy, writer, reviewer — each has its own service module.
+- **Artifact persistence**: All trained models saved to `backend/artifacts/{service}/*.pkl` for fast reload.
+
+### ML Pipeline Rules
+- **Exclude leakage fields**: `duration`, `contact`, `deposit` are proxy fields known only after intervention — never train on them.
+- **Default to stdlib**: causal MVP uses stdlib classifiers. XGBoost/lightgbm upgrades are documented in `backend/metrics/x_learner_reference.py`.
+- **Long-running retraining**: Future improvement — move to Inngest/Trigger.dev async jobs instead of synchronous API calls.
+
+### Human-in-the-Loop Rule
+- **No customer message leaves the backend until admin approval.**
+- Dev `test.py` includes dispatch for E2E testing.
+- Production deployment must halt the graph before `dispatch_agent` and queue pending approvals.
+
+---
+
+
