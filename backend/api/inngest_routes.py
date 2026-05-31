@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 from inngest.fast_api import serve
 import inngest
+import os
 
 from inngest_client import inngest_client
-from services.agents.intervention_graph import compile_intervention_graph
+from services.agents.intervention_graph import compile_intervention_graph, build_production_graph, build_intervention_graph
 
 router = APIRouter()
 
@@ -19,7 +20,8 @@ async def process_retention_workflow(ctx: inngest.Context, step: inngest.Step):
     
     # 1. Start execution
     def _run_graph():
-        graph = compile_intervention_graph()
+        is_prod = os.environ.get("PRODUCTION_MODE", "").lower() in ("1", "true", "yes")
+        graph = build_production_graph() if is_prod else build_intervention_graph()
         initial_state = {
             "payload": event_data,
             "should_intervene": True

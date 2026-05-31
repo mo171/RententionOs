@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from models.message_models import MessageDraft, SendMessageResult
 from utils.resend_client import send_email
-from utils.twilio_client import send_whatsapp_stub
+from utils.twilio_client import send_whatsapp
 
 load_dotenv()
 
@@ -78,13 +78,20 @@ def send_message(
         )
 
     if channel in ("WhatsApp", "Twilio"):
-        if to_phone:
-            send_whatsapp_stub(to_phone, draft.body_plain)
+        recipient_phone = to_phone if to_phone else "whatsapp:+1234567890"
+        if test_mode:
+            recipient_phone = os.getenv("TEST_RECIPIENT_PHONE", "whatsapp:+919876543210")
+            
+        print(f"[Dispatch] Sending WhatsApp to {recipient_phone}")
+        body = f"{draft.subject}\n\n{draft.body_plain}\n\nClaim here: {draft.cta_url}"
+        
+        resp = send_whatsapp(recipient_phone, body)
+        
         return SendMessageResult(
             success=True,
             channel=channel,
-            provider="twilio_stub",
-            message_id="whatsapp_stub",
+            provider="twilio",
+            message_id=resp.get("sid", "wa_stub_ok"),
         )
 
     return SendMessageResult(

@@ -16,3 +16,4 @@ lxml
 resend
 twilio
 inngest
+pandas

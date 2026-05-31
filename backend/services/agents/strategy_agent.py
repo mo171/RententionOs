@@ -36,6 +36,12 @@ def strategy_node(state: InterventionGraphState) -> InterventionGraphState:
     result, trace = run_strategy(
         payload, compliance_result, reasoning_trace, supabase
     )
+    
+    # Let WhatsApp be chosen if the user prefers it, or default to Email
+    profile = trace.get("subscriber_profile", {})
+    preferred = profile.get("preferred_channel", "Email").lower()
+    if preferred == "whatsapp":
+        result = result.model_copy(update={"channel": "WhatsApp"})
 
     if os.getenv("FORCE_EMAIL_CHANNEL", "").lower() in ("1", "true", "yes"):
         result = result.model_copy(update={"channel": "Email"})

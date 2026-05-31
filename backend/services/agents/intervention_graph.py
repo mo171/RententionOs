@@ -10,6 +10,7 @@ from services.agents.strategy_agent import strategy_node
 from services.agents.writer_agent import writer_node
 from services.agents.reviewer_agent import reviewer_node
 from services.agents.dispatch_agent import dispatch_node
+from services.agents.persist_approval_agent import persist_approval_node
 
 MAX_REVISIONS = 3
 
@@ -90,6 +91,55 @@ def build_intervention_graph():
     return graph.compile()
 
 
+def build_production_graph():
+    """
+    Production graph: identical to dev graph, but stops after reviewer
+    and routes to persist_approval instead of dispatch.
+    """
+    graph = StateGraph(InterventionGraphState)
+
+    graph.add_node("compliance", compliance_node)
+    graph.add_node("strategy", strategy_node)
+    graph.add_node("writer", writer_node)
+    graph.add_node("reviewer", reviewer_node)
+    graph.add_node("increment_revision", increment_revision)
+    graph.add_node("set_fallback", set_fallback_flag)
+    graph.add_node("persist_approval", persist_approval_node)
+
+    graph.set_entry_point("compliance")
+    graph.add_conditional_edges(
+        "compliance",
+        route_after_compliance,
+        {"continue": "strategy", "stop": END},
+    )
+    graph.add_edge("strategy", "writer")
+
+    def route_after_writer(state: InterventionGraphState) -> str:
+        if state.get("use_fallback_template"):
+            return "dispatch" # Re-mapped to persist_approval in this graph
+        return "reviewer"
+
+    graph.add_conditional_edges(
+        "writer",
+        route_after_writer,
+        {"dispatch": "persist_approval", "reviewer": "reviewer"},
+    )
+    graph.add_conditional_edges(
+        "reviewer",
+        route_after_review,
+        {
+            "dispatch": "persist_approval",
+            "revise": "increment_revision",
+            "fallback_dispatch": "set_fallback",
+        },
+    )
+    graph.add_edge("increment_revision", "writer")
+    graph.add_edge("set_fallback", "writer")
+    graph.add_edge("persist_approval", END)
+
+    return graph.compile()
+
+
 def initial_graph_state(payload: InterventionPayload) -> InterventionGraphState:
     return {
         "payload": payload,
@@ -114,6 +164,10 @@ def initial_graph_state(payload: InterventionPayload) -> InterventionGraphState:
     }
 
 
-def run_intervention_graph(payload: InterventionPayload) -> InterventionGraphState:
-    app = build_intervention_graph()
+def run_intervention_graph(payload: InterventionPayload, production_mode: bool = False) -> InterventionGraphState:
+    import os
+    if production_mode or os.environ.get("PRODUCTION_MODE", "").lower() in ("1", "true", "yes"):
+        app = build_production_graph()
+    else:
+        app = build_intervention_graph()
     return app.invoke(initial_graph_state(payload))

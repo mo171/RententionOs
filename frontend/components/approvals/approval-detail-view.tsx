@@ -7,6 +7,7 @@ import { ApprovalReasoning } from "@/components/approvals/approval-reasoning";
 import { ApprovalMessageEdit } from "@/components/approvals/approval-message-edit";
 import { X, ArrowRight, Check } from "lucide-react";
 import { useState, useEffect } from "react";
+import { patchApprovalMessage, postApprovalStatus } from "@/lib/api";
 
 interface ApprovalDetailViewProps {
   approval: Approval | undefined;
@@ -71,10 +72,15 @@ export function ApprovalDetailView({ approval }: ApprovalDetailViewProps) {
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  updateMessagePreview(approval.id, draftPreview);
-                  setIsEditing(false);
-                  // PENDING: API call → PATCH /api/approvals/:id
+                onClick={async () => {
+                  try {
+                    await patchApprovalMessage(approval.id, draftPreview.subject, draftPreview.body);
+                    updateMessagePreview(approval.id, draftPreview);
+                    setIsEditing(false);
+                  } catch (err) {
+                    console.error(err);
+                    alert("Failed to save changes");
+                  }
                 }}
                 className="shadow-primary px-4 py-1.5 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-all duration-150"
               >
@@ -84,7 +90,15 @@ export function ApprovalDetailView({ approval }: ApprovalDetailViewProps) {
           ) : (
             <>
               <button
-                onClick={() => setStatus(approval.id, "dismissed")}
+                onClick={async () => {
+                  try {
+                    await postApprovalStatus(approval.id, "dismissed");
+                    setStatus(approval.id, "dismissed");
+                  } catch (err) {
+                    console.error(err);
+                    alert("Failed to reject");
+                  }
+                }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-state-danger-dim text-state-danger text-xs font-semibold hover:bg-state-danger hover:text-white transition-colors duration-150"
               >
                 <X className="w-3.5 h-3.5" />
@@ -97,7 +111,15 @@ export function ApprovalDetailView({ approval }: ApprovalDetailViewProps) {
                 Modify
               </button>
               <button
-                onClick={() => setStatus(approval.id, "approved")}
+                onClick={async () => {
+                  try {
+                    await postApprovalStatus(approval.id, "approved");
+                    setStatus(approval.id, "approved");
+                  } catch (err) {
+                    console.error(err);
+                    alert("Failed to approve");
+                  }
+                }}
                 className="shadow-primary flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-all duration-150"
               >
                 <Check className="w-4 h-4" />

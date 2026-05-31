@@ -44,6 +44,7 @@ def generate_queries(payload: InterventionPayload) -> list[str]:
         user_id=payload.user_id,
         best_discount=payload.best_discount,
         expected_profit=payload.expected_profit,
+        segment=payload.segment or "Unknown",
     )
     print("[Compliance] Step 1: Generating multi-queries...")
     response = llm.invoke([HumanMessage(content=prompt)])

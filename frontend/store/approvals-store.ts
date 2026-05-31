@@ -46,6 +46,7 @@ interface ApprovalsState {
   addApproval: (a: Approval) => void;
   setStatus: (id: string, status: Exclude<ApprovalStatus, "pending">) => void;
   updateMessagePreview: (id: string, preview: { subject: string; body: string }) => void;
+  hydrateFromAPI: (approvals: Approval[]) => void;
 }
 
 const mockApprovals: Approval[] = [
@@ -186,4 +187,5 @@ export const useApprovalsStore = create<ApprovalsState>((set) => ({
         item.id === id ? { ...item, messagePreview: preview } : item
       ),
     })),
+  hydrateFromAPI: (approvals) => set({ items: approvals }),
 }));

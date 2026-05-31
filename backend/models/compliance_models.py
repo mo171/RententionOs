@@ -10,6 +10,13 @@ class InterventionPayload(BaseModel):
     user_id: int
     best_discount: str          # e.g. "10%"
     expected_profit: float      # e.g. 1400.0
+    
+    # Optional fields from the Gatekeeper ML pipeline
+    ltv: Optional[float] = None
+    churn_prob: Optional[float] = None
+    uplift_score: Optional[float] = None
+    recommended_incentive: Optional[str] = None
+    segment: Optional[str] = None
 
 
 # ─── CRAG intermediate ───────────────────────────────────────────────────────
