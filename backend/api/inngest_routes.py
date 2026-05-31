@@ -4,7 +4,7 @@ import inngest
 import os
 
 from inngest_client import inngest_client
-from services.agents.intervention_graph import compile_intervention_graph, build_production_graph, build_intervention_graph
+from services.agents.intervention_graph import build_production_graph, build_intervention_graph
 
 router = APIRouter()
 

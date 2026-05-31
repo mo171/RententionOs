@@ -84,12 +84,12 @@ def process_gatekeeper_pipeline(
                 stats["errors"] += 1
                 continue
                 
-            if not ltv_response.is_eligible_for_retention:
+            if not ltv_response.eligible_for_churn_scoring:
                 print(f"[Gatekeeper] User {user_id} failed LTV eligibility check.")
                 continue
                 
-            if (ltv_response.predictive_12m_ltv or 0) <= LTV_THRESHOLD:
-                print(f"[Gatekeeper] User {user_id} LTV too low: {ltv_response.predictive_12m_ltv}")
+            if (ltv_response.predicted_ltv_12m or 0) <= LTV_THRESHOLD:
+                print(f"[Gatekeeper] User {user_id} LTV too low: {ltv_response.predicted_ltv_12m}")
                 continue
                 
             stats["ltv_filter_passed"] += 1
@@ -116,7 +116,7 @@ def process_gatekeeper_pipeline(
             try:
                 causal_response = score_causal_customer(
                     customer, 
-                    clv=ltv_response.predictive_12m_ltv
+                    clv=ltv_response.predicted_ltv_12m
                 )
             except Exception as e:
                 print(f"[Gatekeeper] Causal scoring failed for user {user_id}: {str(e)}")
@@ -156,7 +156,7 @@ def process_gatekeeper_pipeline(
                 user_id=user_id,
                 best_discount=best_treatment.treatment,
                 expected_profit=expected_profit,
-                ltv=ltv_response.predictive_12m_ltv,
+                ltv=ltv_response.predicted_ltv_12m,
                 churn_prob=churn_response.churn_probability,
                 uplift_score=causal_response.uplift_score,
                 recommended_incentive=best_treatment.treatment,

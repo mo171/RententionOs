@@ -164,6 +164,11 @@ Update this file whenever the current phase, active feature, or implementation s
   - `backend/metrics/uplift_model_metrics.json`, `uplift_model_report.md`, and `persuadable_customers.csv` contain the current generated metrics and profit-approved persuadable list.
   - `backend/services/causal/uplift_service.py` now regenerates the metrics bundle whenever uplift artifacts are saved.
   - `README.md` now documents the backend metrics outputs.
+- 2026-05-31 - Gatekeeper architecture and HITL flow bug fixes:
+  - Phase 1: Created `backend/services/ltv/simulator.py` to generate 10,000 synthetic BFSI profiles covering 5 archetypes and IDEA 2.0 features (upi drop, login decay, life events).
+  - Phase 2: Fixed gatekeeper LTV schema field-name mismatches (`eligible_for_churn_scoring` and `predicted_ltv_12m`).
+  - Phase 3: Fixed broken import in `inngest_routes.py`.
+  - Phase 4/5: Re-wrote `approval_routes.py` to be properly async, created unified `POST /api/approvals/:id/status`, fixed WebSocket payloads, and successfully wired up frontend `use-live-approvals.ts` and `approvals-store.ts` for real-time WebSocket updates. Trigger.dev production mode wait-logic logged successfully.
 - Dev server is running on `npm run dev` at port 3000.
 - The overview route is at `/overview` (served by `app/(dashboard)/overview/page.tsx`).
 - The causal model route is at `/causal-model` (served by `app/(dashboard)/causal-model/page.tsx`).

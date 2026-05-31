@@ -46,6 +46,7 @@ interface ApprovalsState {
   addApproval: (a: Approval) => void;
   setStatus: (id: string, status: Exclude<ApprovalStatus, "pending">) => void;
   updateMessagePreview: (id: string, preview: { subject: string; body: string }) => void;
+  updateApproval: (approval: Approval) => void;
   hydrateFromAPI: (approvals: Approval[]) => void;
 }
 
@@ -187,5 +188,15 @@ export const useApprovalsStore = create<ApprovalsState>((set) => ({
         item.id === id ? { ...item, messagePreview: preview } : item
       ),
     })),
+  updateApproval: (approval) =>
+    set((state) => {
+      const exists = state.items.some((item) => item.id === approval.id);
+      if (exists) {
+        return {
+          items: state.items.map((item) => (item.id === approval.id ? approval : item)),
+        };
+      }
+      return { items: [approval, ...state.items] };
+    }),
   hydrateFromAPI: (approvals) => set({ items: approvals }),
 }));

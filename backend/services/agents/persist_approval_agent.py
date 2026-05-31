@@ -62,8 +62,17 @@ def persist_approval_node(state: InterventionGraphState) -> InterventionGraphSta
         response = supabase.table("pending_approvals").insert(record).execute()
         if response.data:
             print(f"[PersistApproval] Successfully stored pending approval for user {payload.user_id}")
-            # Try to notify websockets if possible, although this is async and we're sync here
-            # For simplicity, websocket broadcast will happen outside or clients will poll initially
+            try:
+                from api.approval_routes import map_db_to_approval_response
+                from api.websocket_routes import broadcast_approval_update
+                updated_model = map_db_to_approval_response(response.data[0])
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(broadcast_approval_update({
+                    "type": "approval_new",
+                    "data": updated_model.model_dump()
+                }))
+            except Exception as e:
+                print(f"[PersistApproval] Warning: WebSocket broadcast failed: {e}")
         else:
             print(f"[PersistApproval] Failed to store approval: {response}")
     except Exception as e:
